@@ -1,0 +1,26 @@
+{
+    "name": "city-builder",
+    "tree": {
+        "$className": "DataModel",
+
+        "ReplicatedStorage": {
+            "Common": {
+                "$path": "src/shared"
+            }
+        },
+
+        "ServerScriptService": {
+            "Server": {
+                "$path": "src/server"
+            }
+        },
+
+        "StarterPlayer": {
+            "StarterPlayerScripts": {
+                "Client": {
+                    "$path": "src/client"
+                }
+            }
+        }
+    }
+}
