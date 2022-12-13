@@ -82,6 +82,8 @@ local function draw(origin: Vector3, x: number, z: number, noiseMap: Map2D<numbe
 	end
 end
 
+local function drawOcean(origin: Vector3) end
+
 local function generateMap(origin: Vector3, width: number, height: number)
 	local seed = Random.new():NextNumber(1, 100000)
 	local falloff = generateFalloff(width)

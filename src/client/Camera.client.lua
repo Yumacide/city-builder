@@ -48,7 +48,6 @@ end)
 
 UserInputService.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton3 then
-		print("should rotate")
 		shouldRotateCamera = true
 		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
 	end
