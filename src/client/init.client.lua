@@ -1,3 +1,4 @@
+-- TODO: maybe make it so the stored data for next frame is ground pos, rotation and height
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
@@ -72,10 +73,24 @@ RunService.Heartbeat:Connect(function(deltaTime)
 	end
 	local cameraForward = nextCameraCFrame * CFrame.Angles(CAMERA_ANGLE, 0, 0)
 	nextCameraCFrame = cameraForward
-		* CFrame.new(movementVector * MOVEMENT_SPEED / 60)
+		* CFrame.new(movementVector * MOVEMENT_SPEED * deltaTime)
 		* CFrame.Angles(-CAMERA_ANGLE, 0, 0)
 end)
 
 RunService.Heartbeat:Connect(function()
+	if Camera.CFrame == nextCameraCFrame then
+		return
+	end
+	-- Keep camera in bounds
+	local yDistance = nextCameraCFrame.Y - 1.5
+	local distance = yDistance / math.sin(CAMERA_ANGLE)
+	local zDistance = yDistance / math.tan(CAMERA_ANGLE)
+	local groundPos = nextCameraCFrame * Vector3.new(0, 0, -distance)
+	groundPos = Vector3.new(math.clamp(groundPos.X, 0, 250), groundPos.Y, math.clamp(groundPos.Z, 0, 250))
+	local cameraPos = CFrame.new(groundPos)
+		* CFrame.Angles(0, currentRotation, 0)
+		* Vector3.new(0, yDistance, zDistance)
+	nextCameraCFrame = CFrame.lookAt(cameraPos, groundPos)
+
 	Camera.CFrame = nextCameraCFrame
 end)
