@@ -1,5 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local MapFolder = workspace.Map
+
 -- TODO: make a separate noise map for trees
 -- TODO: make island object that contains all the tiles
 type Map2D<T> = { { T } }
@@ -85,6 +87,10 @@ local function generateMap(origin: Vector3, width: number, height: number)
 	local falloff = generateFalloff(width)
 	local map = table.create(width)
 	local partMap = table.create(width)
+	MapFolder:SetAttribute("Origin", origin)
+	MapFolder:SetAttribute("Width", width)
+	MapFolder:SetAttribute("Height", height)
+	MapFolder:SetAttribute("Seed", seed)
 
 	for x = 1, width do
 		map[x] = table.create(height)
