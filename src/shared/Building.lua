@@ -7,7 +7,10 @@ local Player = Players.LocalPlayer
 local Mouse = Player:GetMouse()
 local Map = workspace:WaitForChild("Map")
 
-local Maid = require(ReplicatedStorage.Common:WaitForChild("Maid"))
+local BuildingPlaced = ReplicatedStorage.Remotes:WaitForChild("BuildingPlaced")
+
+local Maid = require(ReplicatedStorage.Common.Libraries:WaitForChild("Maid"))
+local Signal = require(ReplicatedStorage.Packages:WaitForChild("Signal"))
 
 local Building = {}
 Building.__index = Building
@@ -37,10 +40,14 @@ function Building.new(name: string)
 	self.Size = BuildingData[name].Size
 	self.ResourcesNeeded = table.clone(BuildingData[name].Resources)
 	self.ResourcesStored = {}
-	self.Selected = false
-	self.Placed = false
+	self.IsSelected = false
+	self.IsPlaced = false
+	self.IsCompleted = false
 	self.Model = ReplicatedStorage.Assets.Buildings[name]:Clone() :: Model
 	self.Maid = Maid.new()
+	self.Placed = Signal.new()
+	self.Destroying = Signal.new()
+	self.Maid:GiveTask(self.Model)
 
 	local boundingBox = Instance.new("Part")
 	boundingBox.Transparency = 1
@@ -56,7 +63,8 @@ function Building.new(name: string)
 	return self
 end
 
-function Building.Select(self: Building)
+function Building.Plan(self: Building)
+	self.IsSelected = true
 	local selectionBox = Instance.new("SelectionBox")
 	selectionBox.LineThickness = 0.01
 	selectionBox.Transparency = 0.5
@@ -76,6 +84,20 @@ function Building.Select(self: Building)
 		self.Model.PrimaryPart.CFrame *= CFrame.Angles(0, math.rad(90), 0)
 	end, false, Enum.KeyCode.R)
 
+	ContextActionService:BindAction("PlaceBuilding", function(_, inputState: Enum.UserInputState)
+		if inputState ~= Enum.UserInputState.Begin then
+			return
+		end
+		self:Place(true)
+	end, false, Enum.UserInputType.MouseButton1)
+
+	ContextActionService:BindAction("CancelBuilding", function(_, inputState: Enum.UserInputState)
+		if inputState ~= Enum.UserInputState.Begin then
+			return
+		end
+		self:Destroy()
+	end, false, Enum.UserInputType.MouseButton2)
+
 	RunService:BindToRenderStep("MoveBuilding", 1, function()
 		-- TODO: raycast to filter non-tiles instead
 		local target = Mouse.Target
@@ -92,11 +114,41 @@ function Building.Select(self: Building)
 				) + Vector3.new(0, 0.1, 0)
 			)
 		)
-		print(self.Model.PrimaryPart.Position)
 	end)
 end
 
+function Building.Place(self: Building, instantBuild: boolean)
+	self.Model.Parent = Map.Buildings
+	self.IsPlaced = true
+
+	ContextActionService:UnbindAction("RotateBuilding")
+	ContextActionService:UnbindAction("PlaceBuilding")
+	ContextActionService:UnbindAction("CancelBuilding")
+	RunService:UnbindFromRenderStep("MoveBuilding")
+	self.Model.SelectionBox:Destroy()
+
+	if instantBuild then
+		self:Complete()
+	end
+	self.Placed:Fire()
+end
+
+function Building.Complete(self: Building)
+	for _, part in self.Model:GetDescendants() do
+		if part:IsA("BasePart") and part.Name ~= "BoundingBox" then
+			part.Transparency = 0
+		end
+	end
+end
+
 function Building.Destroy(self: Building)
+	if self.IsSelected and not self.IsPlaced then
+		ContextActionService:UnbindAction("RotateBuilding")
+		ContextActionService:UnbindAction("PlaceBuilding")
+		ContextActionService:UnbindAction("CancelBuilding")
+		RunService:UnbindFromRenderStep("MoveBuilding")
+	end
+	self.Destroying:Fire()
 	self.Maid:Destroy()
 end
 

@@ -2,9 +2,6 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MapFolder = workspace.Map
 
--- TODO: make a separate noise map for trees
--- TODO: make island object that contains all the tiles
--- TODO: make map class to encapsulate all the map stuff
 type Map2D<T> = { { T } }
 
 local TREE_THRESHOLD, GRASS_THRESHOLD, SAND_THRESHOLD, SHORE_THRESHOLD = 0.25, 0, -0.1, -0.2
@@ -151,6 +148,10 @@ function WorldMap.Generate(self: WorldMap)
 			task.wait()
 		end
 	end
+
+	-- Remove unneeded data
+	self.falloffMap = nil
+	self.noiseMap = nil
 end
 
 type WorldMap = typeof(WorldMap.new(Vector3.zero, 0, 0))

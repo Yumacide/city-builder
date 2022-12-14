@@ -1,10 +1,11 @@
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player.PlayerGui
 
-local Building = require(script.Parent:WaitForChild("Building"))
+local Building = require(ReplicatedStorage.Common:WaitForChild("Building"))
 
 task.wait(1) -- hack
 for _, child in StarterGui:GetChildren() do
@@ -31,12 +32,24 @@ for _, frame in buildMenu:GetChildren() do
 		if currentButton then
 			selectedBuilding:Destroy()
 			if currentButton == button then
+				currentButton = nil
+				selectedBuilding = nil
 				return
 			end
 		end
-		local building = Building.new(frame.Name)
-		building:Select()
-		selectedBuilding = building
+
+		selectedBuilding = Building.new(frame.Name)
+		selectedBuilding:Plan()
 		currentButton = button
+
+		selectedBuilding.Placed:Connect(function()
+			selectedBuilding = nil
+			currentButton = nil
+		end)
+
+		selectedBuilding.Destroying:Connect(function()
+			selectedBuilding = nil
+			currentButton = nil
+		end)
 	end)
 end
