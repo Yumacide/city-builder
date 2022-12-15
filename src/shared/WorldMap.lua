@@ -1,5 +1,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local PathNode = require(script.Parent.PathNode)
+
 local MapFolder = workspace.Map
 
 type Map2D<T> = { { T } }
@@ -154,6 +156,66 @@ function WorldMap.Generate(self: WorldMap)
 	self.noiseMap = nil
 end
 
-type WorldMap = typeof(WorldMap.new(Vector3.zero, 0, 0))
+-- WorldPos must be at the center of a tile.
+function WorldMap.GridPosFromWorldPos(self: WorldMap, worldPos: Vector3)
+	return Vector2int16.new(
+		math.clamp(worldPos.X - self.origin.X, 1, self.width),
+		math.clamp(worldPos.Z - self.origin.Z, 1, self.height)
+	)
+end
+
+function WorldMap.WorldPosFromGridPos(self: WorldMap, gridPos: Vector2int16)
+	return self.origin + Vector3.new(gridPos.X, 0, gridPos.Y)
+end
+
+-- FIX: All tiles in a diagonal path get added to path
+-- TODO: Optimize
+-- TODO: maybe combine all tile data into one object
+function WorldMap.FindPath(
+	self: WorldMap,
+	start: Vector2int16,
+	goal: Vector2int16,
+	diagonal: boolean
+): { Vector2int16 }?
+	local startTime = os.clock()
+	debug.profilebegin("Pathfinding")
+	local openSet = { PathNode.new(start) }
+	local closedSet = {}
+	local path: { Vector2int16 } = {}
+	goal = PathNode.new(goal)
+	while #openSet ~= 0 do
+		local currentNode: PathNode.PathNode = table.remove(openSet, 1)
+
+		if currentNode == goal then
+			while currentNode do
+				table.insert(path, currentNode.Position)
+				currentNode = currentNode.Parent
+			end
+			debug.profileend()
+			print(os.clock() - startTime)
+			return path
+		end
+
+		for _, neighbor in currentNode:GetNeighbors() do
+			if table.find(closedSet, neighbor) or self.featureMap[neighbor.Position.X][neighbor.Position.Y] then
+				continue
+			end
+
+			local costToNeighbor = currentNode.g + currentNode:EstimateCost(neighbor)
+			if costToNeighbor < neighbor.g or not table.find(openSet, neighbor) then
+				neighbor.g = costToNeighbor
+				neighbor.h = neighbor:EstimateCost(goal)
+				neighbor.Parent = currentNode
+
+				if not table.find(openSet, neighbor) then
+					table.insert(openSet, neighbor)
+				end
+			end
+		end
+	end
+	debug.profileend()
+end
+
+export type WorldMap = typeof(WorldMap.new(Vector3.zero, 0, 0))
 
 return WorldMap

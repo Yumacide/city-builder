@@ -39,7 +39,7 @@ for _, frame in buildMenu:GetChildren() do
 		end
 
 		selectedBuilding = Building.new(frame.Name)
-		selectedBuilding:Plan()
+		selectedBuilding:Plan(true)
 		currentButton = button
 
 		selectedBuilding.Placed:Connect(function()

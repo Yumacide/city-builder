@@ -5,3 +5,4 @@ TODO:
 -   Make island object that contains all the tiles
 -   Detect road corners and intersections
 -   Make it possible to place multiple roads at once
+-   Tile pathfinding for roads and people

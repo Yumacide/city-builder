@@ -1,3 +1,4 @@
+-- This is getting somewhat messy -- need to refactor later.
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,6 +12,11 @@ local BuildingPlaced = ReplicatedStorage.Remotes:WaitForChild("BuildingPlaced")
 
 local Maid = require(ReplicatedStorage.Common.Libraries:WaitForChild("Maid"))
 local Signal = require(ReplicatedStorage.Packages:WaitForChild("Signal"))
+local WorldMap = require(script.Parent.WorldMap)
+local MapController
+if RunService:IsClient() then
+	MapController = require(Players.LocalPlayer.PlayerScripts:WaitForChild("Controllers"):WaitForChild("MapController"))
+end
 
 local Building = {}
 Building.__index = Building
@@ -24,13 +30,17 @@ local BuildingData = {
 	},
 }
 
--- fix when origin is not 0,0
+-- fix when origin is not 0,0, move to WorldMap
 local function snapToGrid(origin: Vector3, pos: Vector3, width: number, height: number)
 	return Vector3.new(
 		math.round(math.clamp(pos.X, origin.X, origin.X + width)),
 		pos.Y,
 		math.round(math.clamp(pos.Z, origin.Z, origin.Z + height))
 	)
+end
+
+local function Vector2int16Magnitude(vector: Vector2int16)
+	return math.sqrt(vector.X ^ 2 + vector.Y ^ 2)
 end
 
 function Building.new(name: string)
@@ -43,6 +53,7 @@ function Building.new(name: string)
 	self.IsSelected = false
 	self.IsPlaced = false
 	self.IsCompleted = false
+	self.Data = {}
 	self.Model = ReplicatedStorage.Assets.Buildings[name]:Clone() :: Model
 	self.Maid = Maid.new()
 	self.Placed = Signal.new()
@@ -50,6 +61,7 @@ function Building.new(name: string)
 	self.Maid:GiveTask(self.Model)
 
 	local boundingBox = Instance.new("Part")
+	boundingBox.Anchored = true
 	boundingBox.Transparency = 1
 	boundingBox.TopSurface = Enum.SurfaceType.Smooth
 	boundingBox.BottomSurface = Enum.SurfaceType.Smooth
@@ -63,7 +75,7 @@ function Building.new(name: string)
 	return self
 end
 
-function Building.Plan(self: Building)
+function Building.Plan(self: Building, bindControls: boolean)
 	self.IsSelected = true
 	local selectionBox = Instance.new("SelectionBox")
 	selectionBox.LineThickness = 0.01
@@ -76,6 +88,10 @@ function Building.Plan(self: Building)
 		end
 	end
 	self.Model.Parent = workspace
+
+	if not bindControls then
+		return
+	end
 
 	ContextActionService:BindAction("RotateBuilding", function(_, inputState: Enum.UserInputState)
 		if inputState ~= Enum.UserInputState.Begin then
@@ -111,8 +127,8 @@ function Building.Plan(self: Building)
 					Mouse.Hit.Position,
 					Map:GetAttribute("Width"),
 					Map:GetAttribute("Height")
-				) + Vector3.new(0, 0.1, 0)
-			)
+				) + Vector3.new(0, 0.01, 0)
+			) * (self.Model:GetPivot() - self.Model:GetPivot().Position)
 		)
 	end)
 end
@@ -123,8 +139,12 @@ function Building.Place(self: Building, instantBuild: boolean)
 
 	ContextActionService:UnbindAction("RotateBuilding")
 	ContextActionService:UnbindAction("PlaceBuilding")
-	ContextActionService:UnbindAction("CancelBuilding")
 	RunService:UnbindFromRenderStep("MoveBuilding")
+	if self.Name == "Road" then
+		self:PlaceRoad(instantBuild)
+		return
+	end
+	ContextActionService:UnbindAction("CancelBuilding")
 	self.Model.SelectionBox:Destroy()
 
 	if instantBuild then
@@ -133,7 +153,57 @@ function Building.Place(self: Building, instantBuild: boolean)
 	self.Placed:Fire()
 end
 
+-- TODO: use a part pool
+function Building.PlaceRoad(self: Building, instantBuild: boolean)
+	local map: WorldMap.WorldMap = setmetatable(MapController.MapReplica.Data.Map, WorldMap)
+	local start = map:GridPosFromWorldPos(self.Model.PrimaryPart.Position)
+	local goal: Vector2int16
+	self.Data.Roads = {}
+	RunService:BindToRenderStep("ExtendRoad", 1, function()
+		local startTime = os.clock()
+		local target = Mouse.Target
+		if target.Parent ~= workspace.Map.Tiles then
+			return
+		end
+		local currentGoal = map:GridPosFromWorldPos(snapToGrid(map.origin, Mouse.Hit.Position, map.width, map.height))
+		if goal == currentGoal then
+			return
+		end
+		goal = currentGoal
+
+		for _, road in self.Data.Roads do
+			road:Destroy()
+		end
+		table.clear(self.Data.Roads)
+
+		local path = map:FindPath(start, goal, false)
+		for _, waypoint in path do
+			local direction
+			local delta = waypoint - start
+			if waypoint.X == start.X then
+				direction = delta / math.abs(delta.Y)
+			else
+				direction = delta / math.abs(delta.X)
+			end
+
+			for i = 0, Vector2int16Magnitude(delta) do
+				local road = Building.new("Road")
+				road:Plan(false)
+				road.Model:PivotTo(CFrame.new(map:WorldPosFromGridPos(start + direction * i)) + Vector3.new(0, 0.01, 0))
+				table.insert(self.Data.Roads, road)
+			end
+			start = waypoint
+		end
+
+		if os.clock() - startTime > 0.1 then
+			warn("Road placement took too long")
+			RunService:UnbindFromRenderStep("ExtendRoad")
+		end
+	end)
+end
+
 function Building.Complete(self: Building)
+	self.IsCompleted = true
 	for _, part in self.Model:GetDescendants() do
 		if part:IsA("BasePart") and part.Name ~= "BoundingBox" then
 			part.Transparency = 0
@@ -149,6 +219,11 @@ function Building.Destroy(self: Building)
 		RunService:UnbindFromRenderStep("MoveBuilding")
 	end
 	self.Destroying:Fire()
+	if self.Data.Roads then
+		for _, road in self.Data.Roads do
+			road:Destroy()
+		end
+	end
 	self.Maid:Destroy()
 end
 
