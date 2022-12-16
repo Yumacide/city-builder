@@ -108,11 +108,12 @@ function Building.Plan(self: Building, bindControls: boolean)
 	end, false, Enum.UserInputType.MouseButton1)
 
 	ContextActionService:BindAction("CancelBuilding", function(_, inputState: Enum.UserInputState)
-		if inputState ~= Enum.UserInputState.Begin then
+		if inputState ~= Enum.UserInputState.End then
 			return
 		end
+		print("canceling")
 		self:Destroy()
-	end, false, Enum.UserInputType.MouseButton2)
+	end, false, Enum.KeyCode.F)
 
 	RunService:BindToRenderStep("MoveBuilding", 1, function()
 		-- TODO: raycast to filter non-tiles instead
@@ -127,7 +128,7 @@ function Building.Plan(self: Building, bindControls: boolean)
 					Mouse.Hit.Position,
 					Map:GetAttribute("Width"),
 					Map:GetAttribute("Height")
-				) + Vector3.new(0, 0.01, 0)
+				) + Vector3.new(0, 0.51, 0)
 			) * (self.Model:GetPivot() - self.Model:GetPivot().Position)
 		)
 	end)
@@ -147,13 +148,13 @@ function Building.Place(self: Building, instantBuild: boolean)
 	ContextActionService:UnbindAction("CancelBuilding")
 	self.Model.SelectionBox:Destroy()
 
+	self.Placed:Fire()
 	if instantBuild then
 		self:Complete()
 	end
-	self.Placed:Fire()
 end
 
--- TODO: use a part pool
+-- TODO: Use a part pool
 function Building.PlaceRoad(self: Building, instantBuild: boolean)
 	local map: WorldMap.WorldMap = setmetatable(MapController.MapReplica.Data.Map, WorldMap)
 	local start = map:GridPosFromWorldPos(self.Model.PrimaryPart.Position)
@@ -171,31 +172,28 @@ function Building.PlaceRoad(self: Building, instantBuild: boolean)
 		end
 		goal = currentGoal
 
-		for _, road in self.Data.Roads do
+		for _, road: Building in self.Data.Roads do
 			road:Destroy()
 		end
 		table.clear(self.Data.Roads)
 
-		local path = map:FindPath(start, goal, false)
-		for _, waypoint in path do
+		local path = map:FindPath(start, goal)
+		for _, point in path do
+			--[[
 			local direction
 			local delta = waypoint - start
 			if waypoint.X == start.X then
 				direction = delta / math.abs(delta.Y)
 			else
 				direction = delta / math.abs(delta.X)
-			end
-
-			for i = 0, Vector2int16Magnitude(delta) do
-				local road = Building.new("Road")
-				road:Plan(false)
-				road.Model:PivotTo(CFrame.new(map:WorldPosFromGridPos(start + direction * i)) + Vector3.new(0, 0.01, 0))
-				table.insert(self.Data.Roads, road)
-			end
-			start = waypoint
+			end]]
+			local road = Building.new("Road")
+			road:Plan(false)
+			road.Model:PivotTo(CFrame.new(map:WorldPosFromGridPos(point)) + Vector3.new(0, 1.01, 0))
+			table.insert(self.Data.Roads, road)
 		end
 
-		if os.clock() - startTime > 0.1 then
+		if os.clock() - startTime > 0.05 then
 			warn("Road placement took too long")
 			RunService:UnbindFromRenderStep("ExtendRoad")
 		end
@@ -215,11 +213,13 @@ function Building.Destroy(self: Building)
 	if self.IsSelected and not self.IsPlaced then
 		ContextActionService:UnbindAction("RotateBuilding")
 		ContextActionService:UnbindAction("PlaceBuilding")
-		ContextActionService:UnbindAction("CancelBuilding")
+		--ContextActionService:UnbindAction("CancelBuilding")
 		RunService:UnbindFromRenderStep("MoveBuilding")
 	end
 	self.Destroying:Fire()
 	if self.Data.Roads then
+		print("unbinding extend")
+		RunService:UnbindFromRenderStep("ExtendRoad")
 		for _, road in self.Data.Roads do
 			road:Destroy()
 		end

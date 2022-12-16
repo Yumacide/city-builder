@@ -69,7 +69,7 @@ end
 function WorldMap._DrawTree(self: WorldMap, x: number, z: number)
 	local tree: Model = TreeModel:Clone()
 	tree:PivotTo(CFrame.new(self.origin + Vector3.new(x, 1.5, z)))
-	self.featureMap[x][z] = tree
+	self.featureMap[x][z] = 1
 	tree.Parent = workspace.Map.Features
 end
 
@@ -154,6 +154,14 @@ function WorldMap.Generate(self: WorldMap)
 	-- Remove unneeded data
 	self.falloffMap = nil
 	self.noiseMap = nil
+	for x, row in self.featureMap do
+		for z, feature in row do
+			if feature == 1 then
+				local part = self.tileMap[x][z]
+				part.Color = Color3.fromRGB(215, 107, 107)
+			end
+		end
+	end
 end
 
 -- WorldPos must be at the center of a tile.
@@ -168,36 +176,39 @@ function WorldMap.WorldPosFromGridPos(self: WorldMap, gridPos: Vector2int16)
 	return self.origin + Vector3.new(gridPos.X, 0, gridPos.Y)
 end
 
--- FIX: All tiles in a diagonal path get added to path
 -- TODO: Optimize
--- TODO: maybe combine all tile data into one object
-function WorldMap.FindPath(
-	self: WorldMap,
-	start: Vector2int16,
-	goal: Vector2int16,
-	diagonal: boolean
-): { Vector2int16 }?
-	local startTime = os.clock()
-	debug.profilebegin("Pathfinding")
+-- FIX: Gets slow when goal is near trees, decides to go through a bunch of them past the goal for some reason
+function WorldMap.FindPath(self: WorldMap, start: Vector2int16, goal: Vector2int16): { Vector2int16 }?
 	local openSet = { PathNode.new(start) }
 	local closedSet = {}
 	local path: { Vector2int16 } = {}
 	goal = PathNode.new(goal)
 	while #openSet ~= 0 do
-		local currentNode: PathNode.PathNode = table.remove(openSet, 1)
+		local currentNode: PathNode.PathNode = openSet[1]
+
+		for _, node in openSet do
+			if node.f < currentNode.f or node.f == currentNode.f and node.h < currentNode.h then
+				currentNode = node
+			end
+		end
+		table.remove(openSet, table.find(openSet, currentNode))
+		table.insert(closedSet, currentNode)
+		--self.tileMap[currentNode.Position.X][currentNode.Position.Y].Color = Color3.fromRGB(0, 255, 229)
 
 		if currentNode == goal then
 			while currentNode do
 				table.insert(path, currentNode.Position)
 				currentNode = currentNode.Parent
 			end
-			debug.profileend()
-			print(os.clock() - startTime)
 			return path
 		end
 
 		for _, neighbor in currentNode:GetNeighbors() do
-			if table.find(closedSet, neighbor) or self.featureMap[neighbor.Position.X][neighbor.Position.Y] then
+			if table.find(closedSet, neighbor) then
+				print("already checked")
+				continue
+			elseif self.featureMap[neighbor.Position.X][neighbor.Position.Y] then
+				self.tileMap[neighbor.Position.X][neighbor.Position.Y].Color = Color3.fromRGB(0, 0, 0)
 				continue
 			end
 
@@ -213,7 +224,6 @@ function WorldMap.FindPath(
 			end
 		end
 	end
-	debug.profileend()
 end
 
 export type WorldMap = typeof(WorldMap.new(Vector3.zero, 0, 0))

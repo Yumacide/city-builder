@@ -13,6 +13,7 @@ function PathNode.new(pos: Vector2int16, parent: PathNode?)
 
 	self.g = 0
 	self.h = 0
+	self.f = 0
 
 	return self
 end
