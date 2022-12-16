@@ -39,10 +39,6 @@ local function snapToGrid(origin: Vector3, pos: Vector3, width: number, height: 
 	)
 end
 
-local function Vector2int16Magnitude(vector: Vector2int16)
-	return math.sqrt(vector.X ^ 2 + vector.Y ^ 2)
-end
-
 function Building.new(name: string)
 	local self = setmetatable({}, Building)
 
@@ -161,7 +157,6 @@ function Building.PlaceRoad(self: Building, instantBuild: boolean)
 	local goal: Vector2int16
 	self.Data.Roads = {}
 	RunService:BindToRenderStep("ExtendRoad", 1, function()
-		local startTime = os.clock()
 		local target = Mouse.Target
 		if target.Parent ~= workspace.Map.Tiles then
 			return
@@ -178,6 +173,10 @@ function Building.PlaceRoad(self: Building, instantBuild: boolean)
 		table.clear(self.Data.Roads)
 
 		local path = map:FindPath(start, goal)
+		if not path then
+			return
+		end
+		table.remove(path, 1)
 		for _, point in path do
 			--[[
 			local direction
@@ -191,11 +190,6 @@ function Building.PlaceRoad(self: Building, instantBuild: boolean)
 			road:Plan(false)
 			road.Model:PivotTo(CFrame.new(map:WorldPosFromGridPos(point)) + Vector3.new(0, 1.01, 0))
 			table.insert(self.Data.Roads, road)
-		end
-
-		if os.clock() - startTime > 0.05 then
-			warn("Road placement took too long")
-			RunService:UnbindFromRenderStep("ExtendRoad")
 		end
 	end)
 end

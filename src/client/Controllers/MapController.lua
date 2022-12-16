@@ -3,7 +3,7 @@ local ReplicaController = require(ReplicatedStorage.Common.Libraries.ReplicaCont
 
 local MapController = {}
 
-local mapReplica = ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
+ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 	MapController.MapReplica = replica
 end)
 

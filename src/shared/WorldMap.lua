@@ -50,6 +50,14 @@ local function drawOcean(origin: Vector3, width: number, height: number)
 	part.Parent = workspace.Map
 end
 
+local function reverse(t: table)
+	local reversed = {}
+	for i = #t, 1, -1 do
+		table.insert(reversed, t[i])
+	end
+	return reversed
+end
+
 function WorldMap.new(origin: Vector3, width: number, height: number)
 	local self = setmetatable({}, WorldMap)
 
@@ -66,10 +74,20 @@ function WorldMap.new(origin: Vector3, width: number, height: number)
 	return self
 end
 
+function WorldMap.IsWalkable(self: WorldMap, x: number, z: number): boolean
+	return self.tileMap[x][z] ~= workspace.Map.Tiles.Ocean and not self.featureMap[x][z]
+end
+
 function WorldMap._DrawTree(self: WorldMap, x: number, z: number)
+	if typeof(x) ~= "number" or typeof(z) ~= "number" then
+		error("Invalid arguments to _DrawTree")
+	end
 	local tree: Model = TreeModel:Clone()
 	tree:PivotTo(CFrame.new(self.origin + Vector3.new(x, 1.5, z)))
-	self.featureMap[x][z] = 1
+	self.featureMap[x][z] = tree
+	if typeof(z) == "string" then
+		error("Found string" .. x .. " " .. z)
+	end
 	tree.Parent = workspace.Map.Features
 end
 
@@ -154,14 +172,6 @@ function WorldMap.Generate(self: WorldMap)
 	-- Remove unneeded data
 	self.falloffMap = nil
 	self.noiseMap = nil
-	for x, row in self.featureMap do
-		for z, feature in row do
-			if feature == 1 then
-				local part = self.tileMap[x][z]
-				part.Color = Color3.fromRGB(215, 107, 107)
-			end
-		end
-	end
 end
 
 -- WorldPos must be at the center of a tile.
@@ -177,8 +187,20 @@ function WorldMap.WorldPosFromGridPos(self: WorldMap, gridPos: Vector2int16)
 end
 
 -- TODO: Optimize
--- FIX: Gets slow when goal is near trees, decides to go through a bunch of them past the goal for some reason
 function WorldMap.FindPath(self: WorldMap, start: Vector2int16, goal: Vector2int16): { Vector2int16 }?
+	-- ReplicaService occasionally decides to cast the Z value to a string. This is a band-aid fix.
+	for x, row in self.featureMap do
+		for z, feature in row do
+			if typeof(z) == "string" then
+				self.featureMap[x][tonumber(z)] = feature
+			end
+		end
+	end
+
+	if not self:IsWalkable(start.X, start.Y) or not self:IsWalkable(goal.X, goal.Y) then
+		return nil
+	end
+
 	local openSet = { PathNode.new(start) }
 	local closedSet = {}
 	local path: { Vector2int16 } = {}
@@ -187,31 +209,26 @@ function WorldMap.FindPath(self: WorldMap, start: Vector2int16, goal: Vector2int
 		local currentNode: PathNode.PathNode = openSet[1]
 
 		for _, node in openSet do
-			if node.f < currentNode.f or node.f == currentNode.f and node.h < currentNode.h then
+			if node.f <= currentNode.f and node.h < currentNode.h then
 				currentNode = node
 			end
 		end
+
 		table.remove(openSet, table.find(openSet, currentNode))
 		table.insert(closedSet, currentNode)
-		--self.tileMap[currentNode.Position.X][currentNode.Position.Y].Color = Color3.fromRGB(0, 255, 229)
 
 		if currentNode == goal then
 			while currentNode do
 				table.insert(path, currentNode.Position)
 				currentNode = currentNode.Parent
 			end
-			return path
+			return reverse(path)
 		end
 
 		for _, neighbor in currentNode:GetNeighbors() do
-			if table.find(closedSet, neighbor) then
-				print("already checked")
-				continue
-			elseif self.featureMap[neighbor.Position.X][neighbor.Position.Y] then
-				self.tileMap[neighbor.Position.X][neighbor.Position.Y].Color = Color3.fromRGB(0, 0, 0)
+			if table.find(closedSet, neighbor) or not self:IsWalkable(neighbor.Position.X, neighbor.Position.Y) then
 				continue
 			end
-
 			local costToNeighbor = currentNode.g + currentNode:EstimateCost(neighbor)
 			if costToNeighbor < neighbor.g or not table.find(openSet, neighbor) then
 				neighbor.g = costToNeighbor
