@@ -5,7 +5,12 @@ registry = "test"
 [[package]]
 name = "diobu/city-builder"
 version = "0.1.0"
-dependencies = [["Signal", "sleitnick/signal@1.2.1"]]
+dependencies = [["Flipper", "reselim/flipper@2.0.0"], ["Signal", "sleitnick/signal@1.2.1"]]
+
+[[package]]
+name = "reselim/flipper"
+version = "2.0.0"
+dependencies = []
 
 [[package]]
 name = "sleitnick/signal"

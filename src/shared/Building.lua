@@ -1,4 +1,3 @@
--- This is getting somewhat messy -- need to refactor later.
 local ContextActionService = game:GetService("ContextActionService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -11,6 +10,8 @@ local Map = workspace:WaitForChild("Map")
 local Maid = require(ReplicatedStorage.Common.Libraries:WaitForChild("Maid"))
 local Signal = require(ReplicatedStorage.Packages:WaitForChild("Signal"))
 local WorldMap = require(script.Parent.WorldMap)
+local Spring = require(ReplicatedStorage.Common.Libraries:WaitForChild("Spring"))
+
 local MapController
 if RunService:IsClient() then
 	MapController = require(Players.LocalPlayer.PlayerScripts:WaitForChild("Controllers"):WaitForChild("MapController"))
@@ -49,7 +50,14 @@ function Building.new(name: string)
 	self.Maid = Maid.new()
 	self.Placed = Signal.new()
 	self.Destroying = Signal.new()
+	self.PositionSpring = Spring.new(Vector3.zero)
+	self.AngleSpring = Spring.new(0)
 	self.Maid:GiveTask(self.Model)
+
+	self.Data.PreviousGoalPivot = self.Model:GetPivot()
+	self.PositionSpring.Speed = 10
+	self.AngleSpring.Speed = 10
+	self.Data.AngleGoal = 0
 
 	local boundingBox = Instance.new("Part")
 	boundingBox.Anchored = true
@@ -89,7 +97,7 @@ function Building.Plan(self: Building, bindControls: boolean)
 		if inputState ~= Enum.UserInputState.Begin then
 			return
 		end
-		self.Model.PrimaryPart.CFrame *= CFrame.Angles(0, math.rad(90), 0)
+		self.Data.AngleGoal += math.pi / 2
 	end, false, Enum.KeyCode.R)
 
 	ContextActionService:BindAction("PlaceBuilding", function(_, inputState: Enum.UserInputState)
@@ -113,16 +121,37 @@ function Building.Plan(self: Building, bindControls: boolean)
 		if target.Parent ~= workspace.Map.Tiles then
 			return
 		end
-		self.Model:PivotTo(
-			CFrame.new(
-				map:WorldPosFromGridPos(map:GetHoveredTile())
-					+ Vector3.new(
-						if self.Size.X % 2 == 1 then 0 else 0.5,
-						0.5 * (1 + self.Size.Y),
-						if self.Size.Z % 2 == 1 then 0 else 0.5
-					)
-			) * (self.Model:GetPivot() - self.Model:GetPivot().Position)
-		)
+		self.Data.GoalPivot = CFrame.new(
+			map:WorldPosFromGridPos(map:GetHoveredTile())
+				+ Vector3.new(
+					if self.Size.X % 2 == 1 then 0 else 0.5,
+					0.5 * (1 + self.Size.Y),
+					if self.Size.Z % 2 == 1 then 0 else 0.5
+				)
+		) * (self.Model:GetPivot() - self.Model:GetPivot().Position)
+	end)
+
+	-- this sucks, use this video to do it properly: https://www.youtube.com/watch?v=Db3LooLQM1Q&t=590s
+	RunService:BindToRenderStep("UpdateBuildingPivot", 2, function(deltaTime)
+		local positionGoal = self.Data.GoalPivot.Position
+		local angleGoal = self.Data.AngleGoal
+
+		local previousAngleGoal = self.AngleSpring.Target -- use later
+
+		local delta = angleGoal - previousAngleGoal
+		if delta > math.pi then
+			angleGoal += math.pi * 2
+		elseif delta < -math.pi then
+			angleGoal -= math.pi * 2
+		end
+		self.Data.AngleGoal = angleGoal
+
+		self.PositionSpring.Target = positionGoal
+		self.AngleSpring.Target = angleGoal
+
+		self.PositionSpring:TimeSkip(deltaTime)
+		self.AngleSpring:TimeSkip(deltaTime)
+		self.Model:PivotTo(CFrame.new(self.PositionSpring.Position) * CFrame.Angles(0, self.AngleSpring.Position, 0))
 	end)
 end
 
@@ -133,6 +162,8 @@ function Building.Place(self: Building, instantBuild: boolean)
 	ContextActionService:UnbindAction("RotateBuilding")
 	ContextActionService:UnbindAction("PlaceBuilding")
 	RunService:UnbindFromRenderStep("MoveBuilding")
+	-- TODO: wait until its done moving
+	RunService:UnbindFromRenderStep("UpdateBuildingPivot")
 	if self.Name == "Road" then
 		self:PlaceRoad(instantBuild)
 		return
@@ -195,6 +226,8 @@ function Building.PlaceRoad(self: Building, instantBuild: boolean)
 		ContextActionService:UnbindAction("CancelBuilding")
 		ContextActionService:UnbindAction("PlaceRoad")
 		RunService:UnbindFromRenderStep("ExtendRoad")
+		-- TODO: wait until its done moving
+		RunService:UnbindFromRenderStep("UpdateBuildingPivot")
 
 		self.Model.SelectionBox:Destroy()
 		self.Placed:Fire()
@@ -228,6 +261,8 @@ function Building.Destroy(self: Building)
 		ContextActionService:UnbindAction("PlaceBuilding")
 		--ContextActionService:UnbindAction("CancelBuilding")
 		RunService:UnbindFromRenderStep("MoveBuilding")
+		-- TODO: wait until its done moving
+		RunService:UnbindFromRenderStep("UpdateBuildingPivot")
 	end
 	self.Destroying:Fire()
 	if self.Data.Roads then

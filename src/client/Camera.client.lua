@@ -1,8 +1,11 @@
--- TODO: maybe make it so the stored data for next frame is ground pos, rotation and height
+-- FIX: make it so rotation doesn't wrap around
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Camera = workspace.CurrentCamera
+
+local Spring = require(ReplicatedStorage.Common:WaitForChild("Libraries"):WaitForChild("Spring"))
 
 local CAMERA_ANGLE = math.rad(45)
 local MOVEMENT_VECTORS = {
@@ -16,6 +19,11 @@ local MIN_HEIGHT, MAX_HEIGHT = 10, 80
 
 Camera.CameraType = Enum.CameraType.Scriptable
 Camera.CFrame = CFrame.new(125, 40, 125) * CFrame.Angles(-CAMERA_ANGLE, 0, 0)
+
+local positionSpring = Spring.new(Camera.CFrame.Position)
+local anglesSpring = Spring.new(Vector3.new(Camera.CFrame:ToEulerAnglesXYZ()))
+positionSpring.Speed = 10
+anglesSpring.Speed = 10
 
 local shouldRotateCamera: boolean
 local currentRotation = 0
@@ -76,7 +84,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 		* CFrame.Angles(-CAMERA_ANGLE, 0, 0)
 end)
 
-RunService.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function(deltaTime)
 	if Camera.CFrame == nextCameraCFrame then
 		return
 	end
@@ -91,5 +99,14 @@ RunService.Heartbeat:Connect(function()
 		* Vector3.new(0, yDistance, zDistance)
 	nextCameraCFrame = CFrame.lookAt(cameraPos, groundPos)
 
-	Camera.CFrame = nextCameraCFrame
+	local positionGoal = nextCameraCFrame.Position
+	local anglesGoal = Vector3.new(nextCameraCFrame:ToEulerAnglesXYZ())
+
+	positionSpring.Target = positionGoal
+	anglesSpring.Target = anglesGoal
+
+	positionSpring:TimeSkip(deltaTime)
+	anglesSpring:TimeSkip(deltaTime)
+	Camera.CFrame = CFrame.new(positionSpring.Position)
+		* CFrame.Angles(anglesSpring.Position.X, anglesSpring.Position.Y, anglesSpring.Position.Z)
 end)
