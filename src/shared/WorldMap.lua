@@ -1,3 +1,4 @@
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PathNode = require(script.Parent.PathNode)
@@ -7,6 +8,14 @@ local MapFolder = workspace.Map
 type Map2D<T> = { { T } }
 
 local TREE_THRESHOLD, GRASS_THRESHOLD, SAND_THRESHOLD, SHORE_THRESHOLD = 0.25, 0, -0.1, -0.2
+
+local TerrainType = {
+	Forest = 1,
+	Grass = 2,
+	Sand = 3,
+	Shore = 4,
+	Ocean = 5,
+}
 
 local TreeModel = ReplicatedStorage.Assets.TreeModel
 
@@ -65,8 +74,8 @@ function WorldMap.new(origin: Vector3, width: number, height: number)
 	self.width = width
 	self.height = height
 	self.seed = Random.new():NextNumber(1, 100000)
-	self.noiseMap = table.create(width)
 	self.tileMap = table.create(width)
+	self.terrainMap = table.create(width)
 	self.featureMap = table.create(width)
 	self.falloffMap = generateFalloff(width)
 	self._partCount = 0
@@ -75,7 +84,8 @@ function WorldMap.new(origin: Vector3, width: number, height: number)
 end
 
 function WorldMap.IsWalkable(self: WorldMap, x: number, z: number): boolean
-	return self.tileMap[x][z] ~= workspace.Map.Tiles.Ocean and not self.featureMap[x][z]
+	local terrainType = self.terrainMap[x][z]
+	return terrainType ~= TerrainType.Ocean and terrainType ~= TerrainType.Shore and not self.featureMap[x][z]
 end
 
 function WorldMap._DrawTree(self: WorldMap, x: number, z: number)
@@ -92,19 +102,19 @@ function WorldMap._DrawTree(self: WorldMap, x: number, z: number)
 end
 
 function WorldMap._Draw(self: WorldMap, x: number, z: number)
-	local terrainIndex = self.noiseMap[x][z]
+	local terrainType = self.terrainMap[x][z]
 
-	if terrainIndex == 5 then
+	if terrainType == TerrainType.Ocean then
 		self.tileMap[x][z] = workspace.Map.Ocean
 		return
 	end
 
-	if self.noiseMap[x][z - 1] == terrainIndex then
+	if self.terrainMap[x][z - 1] == terrainType then
 		-- Extend previous part
 		local previousPart = self.tileMap[x][z - 1]
 		resize(previousPart, previousPart.Size.Z + 1)
 		self.tileMap[x][z] = previousPart
-		if terrainIndex == 4 then
+		if terrainType == TerrainType.Forest then
 			self:_DrawTree(x, z)
 		end
 	else
@@ -116,14 +126,14 @@ function WorldMap._Draw(self: WorldMap, x: number, z: number)
 		part.BottomSurface = Enum.SurfaceType.Smooth
 		part.TopSurface = Enum.SurfaceType.Smooth
 
-		if terrainIndex == 1 then
+		if terrainType == TerrainType.Grass then
 			part.Color = Color3.fromRGB(107, 215, 116)
-		elseif terrainIndex == 2 then
+		elseif terrainType == TerrainType.Sand then
 			part.Color = Color3.fromRGB(227, 216, 182)
-		elseif terrainIndex == 3 then
+		elseif terrainType == TerrainType.Shore then
 			part.Color = Color3.fromRGB(133, 171, 243)
 			part.Position -= Vector3.new(0, 1, 0)
-		elseif terrainIndex == 4 then
+		elseif terrainType == TerrainType.Forest then
 			part.Color = Color3.fromRGB(107, 215, 116)
 			self:_DrawTree(x, z)
 		end
@@ -131,6 +141,29 @@ function WorldMap._Draw(self: WorldMap, x: number, z: number)
 		self.tileMap[x][z] = part
 		self._partCount += 1
 	end
+end
+
+function WorldMap.SnapToGrid(self: WorldMap, position: Vector3)
+	return Vector3.new(
+		math.round(math.clamp(position.X, self.origin.X, self.origin.X + self.width)),
+		position.Y,
+		math.round(math.clamp(position.Z, self.origin.Z, self.origin.Z + self.height))
+	)
+end
+
+function WorldMap.GetHoveredTile(self: WorldMap): Vector2int16?
+	local Player = Players.LocalPlayer
+	local Mouse = Player:GetMouse()
+	local ray = workspace.CurrentCamera:ScreenPointToRay(Mouse.X, Mouse.Y)
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterDescendantsInstances = { workspace.Map.Tiles }
+	raycastParams.FilterType = Enum.RaycastFilterType.Whitelist
+	local raycastResult = workspace:Raycast(ray.Origin, ray.Direction * 100, RaycastParams.new())
+	if not raycastResult then
+		return nil
+	end
+	local position = self:SnapToGrid(raycastResult.Position)
+	return self:GridPosFromWorldPos(position)
 end
 
 function WorldMap.Generate(self: WorldMap)
@@ -142,17 +175,17 @@ function WorldMap.Generate(self: WorldMap)
 	drawOcean(self.origin, self.width, self.height)
 
 	for x = 1, self.width do
-		self.noiseMap[x] = table.create(self.height)
 		self.tileMap[x] = table.create(self.height)
 		self.featureMap[x] = table.create(self.height)
+		self.terrainMap[x] = table.create(self.height)
 		for z = 1, self.height do
 			local noise = math.noise(self.seed, x / 40, z / 40) - self.falloffMap[x][z]
-			self.noiseMap[x][z] = if noise > TREE_THRESHOLD
-				then 4
-				elseif noise > GRASS_THRESHOLD then 1
-				elseif noise > SAND_THRESHOLD then 2
-				elseif noise > SHORE_THRESHOLD then 3
-				else 5
+			self.terrainMap[x][z] = if noise > TREE_THRESHOLD
+				then TerrainType.Forest
+				elseif noise > GRASS_THRESHOLD then TerrainType.Grass
+				elseif noise > SAND_THRESHOLD then TerrainType.Sand
+				elseif noise > SHORE_THRESHOLD then TerrainType.Shore
+				else TerrainType.Ocean
 			self:_Draw(x, z)
 		end
 		if x % 20 == 0 then
@@ -169,9 +202,7 @@ function WorldMap.Generate(self: WorldMap)
 		end
 	end
 
-	-- Remove unneeded data
 	self.falloffMap = nil
-	self.noiseMap = nil
 end
 
 -- WorldPos must be at the center of a tile.
