@@ -29,6 +29,22 @@ local shouldRotateCamera: boolean
 local currentRotation = 0
 local nextCameraCFrame = Camera.CFrame
 
+local function _getClosestAngle(new: number, old: number)
+	while math.abs(new - old) > math.pi do
+		if new > old then
+			new -= math.pi * 2
+		else
+			new += math.pi * 2
+		end
+	end
+
+	return new
+end
+
+local function getClosestAngles(new: Vector3, old: Vector3)
+	return Vector3.new(_getClosestAngle(new.X, old.X), _getClosestAngle(new.Y, old.Y), _getClosestAngle(new.Z, old.Z))
+end
+
 UserInputService.InputChanged:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseWheel then
 		if
@@ -84,11 +100,11 @@ RunService.Heartbeat:Connect(function(deltaTime)
 		* CFrame.Angles(-CAMERA_ANGLE, 0, 0)
 end)
 
-RunService.Heartbeat:Connect(function(deltaTime)
-	if Camera.CFrame == nextCameraCFrame then
+RunService.Stepped:Connect(function(_, deltaTime)
+	if Camera.CFrame.Position:FuzzyEq(nextCameraCFrame.Position, 0.001) then
 		return
 	end
-	-- Keep camera in bounds
+
 	local yDistance = nextCameraCFrame.Y - 1.5
 	local distance = yDistance / math.sin(CAMERA_ANGLE)
 	local zDistance = yDistance / math.tan(CAMERA_ANGLE)
@@ -100,13 +116,14 @@ RunService.Heartbeat:Connect(function(deltaTime)
 	nextCameraCFrame = CFrame.lookAt(cameraPos, groundPos)
 
 	local positionGoal = nextCameraCFrame.Position
-	local anglesGoal = Vector3.new(nextCameraCFrame:ToEulerAnglesXYZ())
+	local anglesGoal = getClosestAngles(Vector3.new(nextCameraCFrame:ToOrientation()), anglesSpring.Position)
 
 	positionSpring.Target = positionGoal
 	anglesSpring.Target = anglesGoal
 
 	positionSpring:TimeSkip(deltaTime)
 	anglesSpring:TimeSkip(deltaTime)
+
 	Camera.CFrame = CFrame.new(positionSpring.Position)
-		* CFrame.Angles(anglesSpring.Position.X, anglesSpring.Position.Y, anglesSpring.Position.Z)
+		* CFrame.fromOrientation(anglesSpring.Position.X, anglesSpring.Position.Y, anglesSpring.Position.Z)
 end)
