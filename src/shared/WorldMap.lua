@@ -1,20 +1,14 @@
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local PathNode = require(script.Parent.PathNode)
+local MapConfig = require(script.Parent.MapConfig)
+local getNoise = require(script.Parent.GetNoise)
 
 local MapFolder = workspace.Map
 
-type Map2D<T> = { { T } }
-
-local TREE_THRESHOLD, GRASS_THRESHOLD, SAND_THRESHOLD, SHORE_THRESHOLD = 0.25, 0, -0.1, -0.2
-
-local TerrainType = {
-	Forest = 1,
-	Grass = 2,
-	Sand = 3,
-	Shore = 4,
-	Ocean = 5,
+type Tile = {
+	Biome: string,
+	Height: number,
+	Level: string,
 }
 
 local TreeModel = ReplicatedStorage.Assets.TreeModel
@@ -29,21 +23,46 @@ local function evaluate(value: number)
 	return value ^ a / (value ^ a + (b - b * value) ^ a)
 end
 
-local function generateFalloff(size: number): Map2D<number>
-	local map = table.create(size)
-	for i = 1, size do
-		map[i] = table.create(size)
-		for j = 1, size do
-			local x = i * 2 / size - 1
-			local z = j * 2 / size - 1
-			map[i][j] = evaluate(math.max(math.abs(x), math.abs(z)))
+local function getBiome(humidity: number, temperature: number)
+	local shortestDistance = math.huge
+	local chosenBiome
+	for biomeName, biome in MapConfig.Biomes do
+		local distance = math.sqrt((biome.Humidity - humidity) ^ 2 + (biome.Temperature - temperature) ^ 2)
+		if distance < shortestDistance then
+			shortestDistance = distance
+			chosenBiome = biomeName
+		end
+	end
+	return chosenBiome
+end
+
+local function getLevel(biome: string, height: number)
+	local shortestDistance = math.huge
+	local chosenLevel
+	for levelName, level in MapConfig.Biomes[biome].Levels do
+		local distance = math.abs(level.Height - height)
+		if distance < shortestDistance then
+			shortestDistance = distance
+			chosenLevel = levelName
+		end
+	end
+	return chosenLevel
+end
+
+local function generateFalloff(width: number): { number }
+	local map = table.create(width ^ 2)
+	for i = 1, width do
+		for j = 1, width do
+			local x = i * 2 / width - 1
+			local z = j * 2 / width - 1
+			map[i + (j - 1) * width] = evaluate(math.max(math.abs(x), math.abs(z)))
 		end
 	end
 	return map
 end
 
 local function resize(part: Part, size: number)
-	part.Position = part.Position + Vector3.new(0, 0, math.abs(part.Size.Z - size) / 2)
+	part.Position += Vector3.new(0, 0, math.abs(part.Size.Z - size) / 2)
 	part.Size = Vector3.new(1, 1, size)
 end
 
@@ -59,14 +78,6 @@ local function drawOcean(origin: Vector3, width: number, height: number)
 	part.Parent = workspace.Map
 end
 
-local function reverse(t: table)
-	local reversed = {}
-	for i = #t, 1, -1 do
-		table.insert(reversed, t[i])
-	end
-	return reversed
-end
-
 function WorldMap.new(origin: Vector3, width: number, height: number)
 	local self = setmetatable({}, WorldMap)
 
@@ -74,49 +85,54 @@ function WorldMap.new(origin: Vector3, width: number, height: number)
 	self.width = width
 	self.height = height
 	self.seed = Random.new():NextNumber(1, 100000)
-	self.tileMap = table.create(width)
-	self.terrainMap = table.create(width)
-	self.featureMap = table.create(width)
+	self.data = table.create(width * height) :: { Tile }
 	self.falloffMap = generateFalloff(width)
 	self._partCount = 0
 
 	return self
 end
 
+function WorldMap.Get(self: WorldMap, x: number, z: number)
+	return self.data[x + (z - 1) * self.width]
+end
+function WorldMap.Set(self: WorldMap, x: number, z: number, value: Tile)
+	self.data[x + (z - 1) * self.width] = value
+end
+
 function WorldMap.IsWalkable(self: WorldMap, x: number, z: number): boolean
-	local terrainType = self.terrainMap[x][z]
-	return terrainType ~= TerrainType.Ocean and terrainType ~= TerrainType.Shore and not self.featureMap[x][z]
+	local tile = self:Get(x, z)
+	local biome = tile.Biome
+	local level = tile.Level
+	return not MapConfig.Biomes[biome].Levels[level].Impassable
 end
 
 function WorldMap._DrawTree(self: WorldMap, x: number, z: number)
-	if typeof(x) ~= "number" or typeof(z) ~= "number" then
-		error("Invalid arguments to _DrawTree")
-	end
 	local tree: Model = TreeModel:Clone()
 	tree:PivotTo(CFrame.new(self.origin + Vector3.new(x, 1.5, z)))
 	self.featureMap[x][z] = tree
-	if typeof(z) == "string" then
-		error("Found string" .. x .. " " .. z)
-	end
 	tree.Parent = workspace.Map.Features
 end
 
 function WorldMap._Draw(self: WorldMap, x: number, z: number)
-	local terrainType = self.terrainMap[x][z]
+	local tile = self:Get(x, z)
+	local leftTile = self:Get(x, z - 1)
 
-	if terrainType == TerrainType.Ocean then
-		self.tileMap[x][z] = workspace.Map.Ocean
+	if tile.Height <= -0.45 then
+		tile.Part = workspace.Map.Ocean
+		tile.IsOcean = true
 		return
 	end
 
-	if self.terrainMap[x][z - 1] == terrainType then
+	if
+		leftTile
+		and tile.Biome == leftTile.Biome
+		and tile.Level == leftTile.Level
+		and not MapConfig.Biomes[tile.Biome].Levels[tile.Level].NotGreedy
+		and not leftTile.IsOcean
+	then
 		-- Extend previous part
-		local previousPart = self.tileMap[x][z - 1]
-		resize(previousPart, previousPart.Size.Z + 1)
-		self.tileMap[x][z] = previousPart
-		if terrainType == TerrainType.Forest then
-			self:_DrawTree(x, z)
-		end
+		resize(leftTile.Part, leftTile.Part.Size.Z + 1)
+		tile.Part = leftTile.Part
 	else
 		local part = Instance.new("Part")
 		part.Size = Vector3.one
@@ -126,19 +142,8 @@ function WorldMap._Draw(self: WorldMap, x: number, z: number)
 		part.BottomSurface = Enum.SurfaceType.Smooth
 		part.TopSurface = Enum.SurfaceType.Smooth
 
-		if terrainType == TerrainType.Grass then
-			part.Color = Color3.fromRGB(107, 215, 116)
-		elseif terrainType == TerrainType.Sand then
-			part.Color = Color3.fromRGB(227, 216, 182)
-		elseif terrainType == TerrainType.Shore then
-			part.Color = Color3.fromRGB(133, 171, 243)
-			part.Position -= Vector3.new(0, 1, 0)
-		elseif terrainType == TerrainType.Forest then
-			part.Color = Color3.fromRGB(107, 215, 116)
-			self:_DrawTree(x, z)
-		end
-
-		self.tileMap[x][z] = part
+		MapConfig.Biomes[tile.Biome].Levels[tile.Level].Modify(part, tile.Height)
+		tile.Part = part
 		self._partCount += 1
 	end
 end
@@ -151,21 +156,6 @@ function WorldMap.SnapToGrid(self: WorldMap, position: Vector3)
 	)
 end
 
-function WorldMap.GetHoveredTile(self: WorldMap): Vector2int16?
-	local Player = Players.LocalPlayer
-	local Mouse = Player:GetMouse()
-	local ray = workspace.CurrentCamera:ScreenPointToRay(Mouse.X, Mouse.Y)
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterDescendantsInstances = { workspace.Map.Tiles }
-	raycastParams.FilterType = Enum.RaycastFilterType.Whitelist
-	local raycastResult = workspace:Raycast(ray.Origin, ray.Direction * 100, RaycastParams.new())
-	if not raycastResult then
-		return nil
-	end
-	local position = self:SnapToGrid(raycastResult.Position)
-	return self:GridPosFromWorldPos(position)
-end
-
 function WorldMap.Generate(self: WorldMap)
 	MapFolder:SetAttribute("Origin", self.origin)
 	MapFolder:SetAttribute("Width", self.width)
@@ -175,27 +165,21 @@ function WorldMap.Generate(self: WorldMap)
 	drawOcean(self.origin, self.width, self.height)
 
 	for x = 1, self.width do
-		self.tileMap[x] = table.create(self.height)
-		self.featureMap[x] = table.create(self.height)
-		self.terrainMap[x] = table.create(self.height)
 		for z = 1, self.height do
-			local noise = math.noise(self.seed, x / 40, z / 40) - self.falloffMap[x][z]
-			self.terrainMap[x][z] = if noise > TREE_THRESHOLD
-				then TerrainType.Forest
-				elseif noise > GRASS_THRESHOLD then TerrainType.Grass
-				elseif noise > SAND_THRESHOLD then TerrainType.Sand
-				elseif noise > SHORE_THRESHOLD then TerrainType.Shore
-				else TerrainType.Ocean
-			self:_Draw(x, z)
-		end
-		if x % 20 == 0 then
-			task.wait()
-		end
-	end
+			local humidity = math.clamp(getNoise({ self.seed, x / 40, z / 40 }, 1) + 0.5, 0, 1)
+			local temperature =
+				math.clamp(getNoise({ math.round(math.sqrt(self.seed)), x / 40, z / 40 }, 1) + 0.5, 0, 1)
+			local height = getNoise({ self.seed, x / 40, z / 40 }, 1, 2, 0.5)
+				- self.falloffMap[x + (z - 1) * self.width]
 
-	for x = 1, self.width do
-		for z = 1, self.height do
-			self.tileMap[x][z].Parent = workspace.Map.Tiles
+			local biome = getBiome(humidity, temperature)
+			local tile = { Biome = biome, Height = height, Level = getLevel(biome, height) }
+			self:Set(x, z, tile)
+			self:_Draw(x, z)
+			if tile.Part.Name == "Ocean" then
+				continue
+			end
+			tile.Part.Parent = workspace.Map.Tiles
 		end
 		if x % 20 == 0 then
 			task.wait()
@@ -215,63 +199,6 @@ end
 
 function WorldMap.WorldPosFromGridPos(self: WorldMap, gridPos: Vector2int16)
 	return self.origin + Vector3.new(gridPos.X, 0, gridPos.Y)
-end
-
--- TODO: Optimize
-function WorldMap.FindPath(self: WorldMap, start: Vector2int16, goal: Vector2int16): { Vector2int16 }?
-	-- ReplicaService occasionally decides to cast the Z value to a string. This is a band-aid fix.
-	for x, row in self.featureMap do
-		for z, feature in row do
-			if typeof(z) == "string" then
-				self.featureMap[x][tonumber(z)] = feature
-			end
-		end
-	end
-
-	if not self:IsWalkable(start.X, start.Y) or not self:IsWalkable(goal.X, goal.Y) then
-		return nil
-	end
-
-	local openSet = { PathNode.new(start) }
-	local closedSet = {}
-	local path: { Vector2int16 } = {}
-	goal = PathNode.new(goal)
-	while #openSet ~= 0 do
-		local currentNode: PathNode.PathNode = openSet[1]
-
-		for _, node in openSet do
-			if node.f <= currentNode.f and node.h < currentNode.h then
-				currentNode = node
-			end
-		end
-
-		table.remove(openSet, table.find(openSet, currentNode))
-		table.insert(closedSet, currentNode)
-
-		if currentNode == goal then
-			while currentNode do
-				table.insert(path, currentNode.Position)
-				currentNode = currentNode.Parent
-			end
-			return reverse(path)
-		end
-
-		for _, neighbor in currentNode:GetNeighbors() do
-			if table.find(closedSet, neighbor) or not self:IsWalkable(neighbor.Position.X, neighbor.Position.Y) then
-				continue
-			end
-			local costToNeighbor = currentNode.g + currentNode:EstimateCost(neighbor)
-			if costToNeighbor < neighbor.g or not table.find(openSet, neighbor) then
-				neighbor.g = costToNeighbor
-				neighbor.h = neighbor:EstimateCost(goal)
-				neighbor.Parent = currentNode
-
-				if not table.find(openSet, neighbor) then
-					table.insert(openSet, neighbor)
-				end
-			end
-		end
-	end
 end
 
 export type WorldMap = typeof(WorldMap.new(Vector3.zero, 0, 0))
