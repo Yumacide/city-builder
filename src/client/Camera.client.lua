@@ -23,7 +23,7 @@ Camera.CFrame = CFrame.new(125, 40, 125) * CFrame.Angles(-CAMERA_ANGLE, 0, 0)
 local positionSpring = Spring.new(Camera.CFrame.Position)
 local anglesSpring = Spring.new(Vector3.new(Camera.CFrame:ToEulerAnglesXYZ()))
 positionSpring.Speed = 10
-anglesSpring.Speed = 10
+anglesSpring.Speed = 15
 
 local shouldRotateCamera: boolean
 local currentRotation = 0

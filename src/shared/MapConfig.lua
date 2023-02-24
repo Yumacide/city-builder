@@ -27,6 +27,11 @@ return {
 						part.Color = Color3.fromRGB(238, 238, 238)
 					end,
 				},
+				LightSnow = {
+					Modify = function(part: BasePart)
+						part.Color = Color3.fromRGB(163, 236, 254)
+					end,
+				},
 			},
 		},
 		Plains = {

@@ -1,7 +1,18 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MapConfig = require(script.Parent.MapConfig)
+
 local getNoise = require(script.Parent.GetNoise)
+
+local BIOME_MAP = require(script.Parent.BiomeMap)
+local BIOME_TABLE = {
+	[1] = { "Snow", "Snow" },
+	[2] = { "Snow", "LightSnow" },
+	[3] = { "Plains", "Green" },
+	[4] = { "Plains", "LightGreen" },
+	[5] = { "Desert", "Sand" },
+}
+local CHUNK_COUNT = 4
 
 local MapFolder = workspace.Map
 
@@ -24,29 +35,16 @@ local function evaluate(value: number)
 end
 
 local function getBiome(humidity: number, temperature: number)
-	local shortestDistance = math.huge
-	local chosenBiome
-	for biomeName, biome in MapConfig.Biomes do
-		local distance = math.sqrt((biome.Humidity - humidity) ^ 2 + (biome.Temperature - temperature) ^ 2)
-		if distance < shortestDistance then
-			shortestDistance = distance
-			chosenBiome = biomeName
-		end
+	local x = math.clamp(math.round(100 * (1 - temperature)), 1, 100)
+	local y = math.clamp(math.round(100 * (1 - humidity)), 1, 100)
+	local biomeIndex = BIOME_MAP[x + (y - 1) * 100]
+	if not biomeIndex then
+		error(`${x} ${y} ${humidity} ${temperature}`)
 	end
-	return chosenBiome
-end
 
-local function getLevel(biome: string, height: number)
-	local shortestDistance = math.huge
-	local chosenLevel
-	for levelName, level in MapConfig.Biomes[biome].Levels do
-		local distance = math.abs(level.Height - height)
-		if distance < shortestDistance then
-			shortestDistance = distance
-			chosenLevel = levelName
-		end
-	end
-	return chosenLevel
+	return MapConfig.Biomes[BIOME_TABLE[biomeIndex][1]].Levels[BIOME_TABLE[biomeIndex][2]],
+		BIOME_TABLE[biomeIndex][1],
+		BIOME_TABLE[biomeIndex][2]
 end
 
 local function generateFalloff(width: number): { number }
@@ -97,6 +95,14 @@ function WorldMap.Get(self: WorldMap, x: number, z: number)
 end
 function WorldMap.Set(self: WorldMap, x: number, z: number, value: Tile)
 	self.data[x + (z - 1) * self.width] = value
+end
+
+-- Get temperature as a function of distance from the equator
+function WorldMap.GetTemperature(self: WorldMap, y: number)
+	local a = 5
+	local b = 4
+	local distance = 0.5 - y / self.height
+	return -b * math.exp(-a * distance) / (1 + math.exp(-a * distance)) ^ 2 + 1
 end
 
 function WorldMap.IsWalkable(self: WorldMap, x: number, z: number): boolean
@@ -156,6 +162,13 @@ function WorldMap.SnapToGrid(self: WorldMap, position: Vector3)
 	)
 end
 
+function WorldMap.GenerateHumidity(self: WorldMap)
+	local map = table.create(self.width * self.height)
+	for chunk = 1, CHUNK_COUNT do
+		-- LEFT HERE
+	end
+end
+
 function WorldMap.Generate(self: WorldMap)
 	MapFolder:SetAttribute("Origin", self.origin)
 	MapFolder:SetAttribute("Width", self.width)
@@ -167,13 +180,16 @@ function WorldMap.Generate(self: WorldMap)
 	for x = 1, self.width do
 		for z = 1, self.height do
 			local humidity = math.clamp(getNoise({ self.seed, x / 40, z / 40 }, 1) + 0.5, 0, 1)
-			local temperature =
-				math.clamp(getNoise({ math.round(math.sqrt(self.seed)), x / 40, z / 40 }, 1) + 0.5, 0, 1)
+			local temperature = math.clamp(
+				self:GetTemperature(z), --+ getNoise({ math.round(math.sqrt(self.seed)), x / 40, z / 40 }, 0.1),
+				0,
+				1
+			)
 			local height = getNoise({ self.seed, x / 40, z / 40 }, 1, 2, 0.5)
 				- self.falloffMap[x + (z - 1) * self.width]
 
-			local biome = getBiome(humidity, temperature)
-			local tile = { Biome = biome, Height = height, Level = getLevel(biome, height) }
+			local biome, biomeName, levelName = getBiome(humidity, temperature)
+			local tile = { Biome = biomeName, Height = height, Level = levelName }
 			self:Set(x, z, tile)
 			self:_Draw(x, z)
 			if tile.Part.Name == "Ocean" then
