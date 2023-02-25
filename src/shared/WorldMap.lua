@@ -35,7 +35,7 @@ local function evaluate(value: number)
 end
 
 local function getBiome(humidity: number, temperature: number)
-	local x = math.clamp(math.round(100 * (1 - temperature)), 1, 100)
+	local x = math.clamp(math.round(100 * temperature), 1, 100)
 	local y = math.clamp(math.round(100 * (1 - humidity)), 1, 100)
 	local biomeIndex = BIOME_MAP[x + (y - 1) * 100]
 	if not biomeIndex then
@@ -93,16 +93,17 @@ end
 function WorldMap.Get(self: WorldMap, x: number, z: number)
 	return self.data[x + (z - 1) * self.width]
 end
+
 function WorldMap.Set(self: WorldMap, x: number, z: number, value: Tile)
 	self.data[x + (z - 1) * self.width] = value
 end
 
 -- Get temperature as a function of distance from the equator
 function WorldMap.GetTemperature(self: WorldMap, y: number)
-	local a = 5
+	local a = 20
 	local b = 4
 	local distance = 0.5 - y / self.height
-	return -b * math.exp(-a * distance) / (1 + math.exp(-a * distance)) ^ 2 + 1
+	return b * math.exp(-a * distance) / (1 + math.exp(-a * distance)) ^ 2
 end
 
 function WorldMap.IsWalkable(self: WorldMap, x: number, z: number): boolean
@@ -135,6 +136,7 @@ function WorldMap._Draw(self: WorldMap, x: number, z: number)
 		and tile.Level == leftTile.Level
 		and not MapConfig.Biomes[tile.Biome].Levels[tile.Level].NotGreedy
 		and not leftTile.IsOcean
+		and false -- temp
 	then
 		-- Extend previous part
 		resize(leftTile.Part, leftTile.Part.Size.Z + 1)
@@ -162,11 +164,51 @@ function WorldMap.SnapToGrid(self: WorldMap, position: Vector3)
 	)
 end
 
-function WorldMap.GenerateHumidity(self: WorldMap)
-	local map = table.create(self.width * self.height)
-	for chunk = 1, CHUNK_COUNT do
-		-- LEFT HERE
+function WorldMap.GetNeighbors(self: WorldMap, index: number)
+	return {
+		index + 1,
+		index - 1,
+		index + self.width,
+		index - self.width,
+	}
+end
+
+function WorldMap.GenerateBlobs(self: WorldMap, _: number)
+	local types = { "+Temp", "-Temp", "+Rain", "-Rain" }
+	local blobs = {}
+	for _ = 1, 100 do
+		local blob = { Type = types[math.random(1, #types)], Map = table.create(self.height, self.width) }
+		table.insert(blobs, blob)
+		local x = math.random(1, self.width)
+		local z = math.random(1, self.height)
+		local i = x + (z - 1) * self.width
+		blob.Map[i] = 1
+		local openSet = { [i + 1] = i, [i - 1] = i, [i + self.width] = i, [i - self.width] = i }
+		local edgeSet = { i }
+		while #edgeSet > 0 do
+			for index, edge in edgeSet do
+				table.remove(edgeSet, index)
+				for _, neighbor in self:GetNeighbors(edge) do
+					if blob.Map[neighbor] or openSet[neighbor] then
+						continue
+					end
+					openSet[neighbor] = edge
+				end
+			end
+			for index, prevNeighbor in openSet do
+				openSet[index] = nil
+				blob.Map[index] = blob.Map[prevNeighbor] - math.random() * 0.02
+				if blob.Map[index] <= 0 then
+					blob.Map[index] = 0
+					continue
+				end
+				table.insert(edgeSet, index)
+			end
+		end
+		task.wait()
 	end
+
+	return blobs
 end
 
 function WorldMap.Generate(self: WorldMap)
@@ -175,23 +217,55 @@ function WorldMap.Generate(self: WorldMap)
 	MapFolder:SetAttribute("Height", self.height)
 	MapFolder:SetAttribute("Seed", self.seed)
 
-	drawOcean(self.origin, self.width, self.height)
+	local blobs = self:GenerateBlobs(CHUNK_COUNT)
+	local humidityMap = table.create(self.height * self.width, 0)
+	local temperatureMap = table.create(self.height * self.width, 0)
 
+	for _, blob in blobs do
+		local modifier = if blob.Type == "+Temp"
+			then function(i, v)
+				temperatureMap[i] += v
+			end
+			elseif blob.Type == "-Temp" then function(i, v)
+				temperatureMap[i] -= v
+			end
+			elseif blob.Type == "+Rain" then function(i, v)
+				humidityMap[i] += v
+			end
+			elseif blob.Type == "-Rain" then function(i, v)
+				humidityMap[i] -= v
+			end
+			else error("No blob type")
+		for i, v in blob.Map do
+			if i <= 0 or i > self.height * self.width then
+				continue
+			end
+			modifier(i, v)
+		end
+	end
+
+	drawOcean(self.origin, self.width, self.height)
+	local n = 0
 	for x = 1, self.width do
 		for z = 1, self.height do
-			local humidity = math.clamp(getNoise({ self.seed, x / 40, z / 40 }, 1) + 0.5, 0, 1)
-			local temperature = math.clamp(
+			local i = x + (z - 1) * self.width
+			local humidity = math.clamp(humidityMap[i], 0, 1)
+			local temperature = math.clamp(temperatureMap[i], 0, 1) --[[math.clamp(
 				self:GetTemperature(z), --+ getNoise({ math.round(math.sqrt(self.seed)), x / 40, z / 40 }, 0.1),
 				0,
 				1
-			)
-			local height = getNoise({ self.seed, x / 40, z / 40 }, 1, 2, 0.5)
-				- self.falloffMap[x + (z - 1) * self.width]
+			)]]
+			local height = getNoise({ self.seed, x / 40, z / 40 }, 1, 2, 0.5) - self.falloffMap[i]
 
-			local biome, biomeName, levelName = getBiome(humidity, temperature)
+			local _, biomeName, levelName = getBiome(humidity, temperature)
 			local tile = { Biome = biomeName, Height = height, Level = levelName }
 			self:Set(x, z, tile)
 			self:_Draw(x, z)
+			if humidity > 0 and false then
+				self:Get(x, z).Part.Color = Color3.new(1 - humidity, 1 - humidity, 1 - humidity)
+			else
+				n += 1
+			end
 			if tile.Part.Name == "Ocean" then
 				continue
 			end
@@ -201,6 +275,7 @@ function WorldMap.Generate(self: WorldMap)
 			task.wait()
 		end
 	end
+	print(n, self.height * self.width)
 
 	self.falloffMap = nil
 end
