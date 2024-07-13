@@ -173,42 +173,48 @@ function WorldMap.GetNeighbors(self: WorldMap, index: number)
 	}
 end
 
-function WorldMap.GenerateBlobs(self: WorldMap, _: number)
+function WorldMap.GenerateBlobs(self: WorldMap, chunkCount: number)
 	local types = { "+Temp", "-Temp", "+Rain", "-Rain" }
-	local blobs = {}
-	for _ = 1, 100 do
-		local blob = { Type = types[math.random(1, #types)], Map = table.create(self.height, self.width) }
-		table.insert(blobs, blob)
-		local x = math.random(1, self.width)
-		local z = math.random(1, self.height)
-		local i = x + (z - 1) * self.width
-		blob.Map[i] = 1
-		local openSet = { [i + 1] = i, [i - 1] = i, [i + self.width] = i, [i - self.width] = i }
-		local edgeSet = { i }
-		while #edgeSet > 0 do
-			for index, edge in edgeSet do
-				table.remove(edgeSet, index)
-				for _, neighbor in self:GetNeighbors(edge) do
-					if blob.Map[neighbor] or openSet[neighbor] then
-						continue
+	local map = {}
+	local chunkWidth = math.round(self.width / chunkCount)
+	for _ = 1, 4 do
+		for xChunk = 1, chunkCount do
+			for zChunk = 1, chunkCount do
+				local blobType = types[math.random(1, #types)]
+				local x = math.random(1, chunkWidth) + (xChunk - 1) * chunkWidth
+				local z = math.random(1, chunkWidth) + (zChunk - 1) * chunkWidth
+				local i = x + (z - 1) * self.width
+				map[i] = { Type = blobType, Value = 1 }
+				local openSet = { [i + 1] = i, [i - 1] = i, [i + self.width] = i, [i - self.width] = i }
+				local closedSet = {}
+				local edgeSet = { i }
+				while #edgeSet > 0 do
+					for index, edge in edgeSet do
+						table.remove(edgeSet, index)
+						for _, neighbor in self:GetNeighbors(edge) do
+							if closedSet[neighbor] or openSet[neighbor] then
+								continue
+							end
+							openSet[neighbor] = edge
+						end
 					end
-					openSet[neighbor] = edge
+					for index, prevNeighbor in openSet do
+						openSet[index] = nil
+						map[index] = { Type = blobType, Value = map[prevNeighbor].Value - math.random() * 0.01 }
+						closedSet[index] = true
+						if map[index].Value <= 0 then
+							map[index].Value = 0
+							continue
+						end
+						table.insert(edgeSet, index)
+					end
 				end
-			end
-			for index, prevNeighbor in openSet do
-				openSet[index] = nil
-				blob.Map[index] = blob.Map[prevNeighbor] - math.random() * 0.02
-				if blob.Map[index] <= 0 then
-					blob.Map[index] = 0
-					continue
-				end
-				table.insert(edgeSet, index)
+				task.wait()
 			end
 		end
-		task.wait()
 	end
 
-	return blobs
+	return map
 end
 
 function WorldMap.Generate(self: WorldMap)
@@ -217,30 +223,39 @@ function WorldMap.Generate(self: WorldMap)
 	MapFolder:SetAttribute("Height", self.height)
 	MapFolder:SetAttribute("Seed", self.seed)
 
-	local blobs = self:GenerateBlobs(CHUNK_COUNT)
-	local humidityMap = table.create(self.height * self.width, 0)
-	local temperatureMap = table.create(self.height * self.width, 0)
+	local blobsMap = self:GenerateBlobs(CHUNK_COUNT)
+	local humidityMap = table.create(self.height * self.width)
+	local temperatureMap = table.create(self.height * self.width)
 
-	for _, blob in blobs do
-		local modifier = if blob.Type == "+Temp"
-			then function(i, v)
-				temperatureMap[i] += v
+	for x = 1, self.width do
+		for z = 1, self.height do
+			temperatureMap[x + (z - 1) * self.width] = getNoise({ self.seed * 2, x / 40, z / 40 }, 1, 1) + 0.5
+		end
+	end
+
+	for x = 1, self.width do
+		for z = 1, self.height do
+			humidityMap[x + (z - 1) * self.width] = getNoise({ self.seed / 2, x / 40, z / 40 }, 1, 1) + 0.5
+		end
+	end
+
+	for i, v in blobsMap do
+		if i < 1 or i >= self.width * self.height then
+			continue
+		end
+		local success = pcall(function()
+			if v.Type == "+Temp" then
+				temperatureMap[i] += v.Value
+			elseif v.Type == "-Temp" then
+				temperatureMap[i] -= v.Value
+			elseif v.Type == "+Rain" then
+				humidityMap[i] += v.Value
+			elseif v.Type == "-Rain" then
+				humidityMap[i] -= v.Value
 			end
-			elseif blob.Type == "-Temp" then function(i, v)
-				temperatureMap[i] -= v
-			end
-			elseif blob.Type == "+Rain" then function(i, v)
-				humidityMap[i] += v
-			end
-			elseif blob.Type == "-Rain" then function(i, v)
-				humidityMap[i] -= v
-			end
-			else error("No blob type")
-		for i, v in blob.Map do
-			if i <= 0 or i > self.height * self.width then
-				continue
-			end
-			modifier(i, v)
+		end)
+		if not success then
+			error(`{i}`)
 		end
 	end
 
@@ -250,11 +265,7 @@ function WorldMap.Generate(self: WorldMap)
 		for z = 1, self.height do
 			local i = x + (z - 1) * self.width
 			local humidity = math.clamp(humidityMap[i], 0, 1)
-			local temperature = math.clamp(temperatureMap[i], 0, 1) --[[math.clamp(
-				self:GetTemperature(z), --+ getNoise({ math.round(math.sqrt(self.seed)), x / 40, z / 40 }, 0.1),
-				0,
-				1
-			)]]
+			local temperature = math.clamp(temperatureMap[i], 0, 1)
 			local height = getNoise({ self.seed, x / 40, z / 40 }, 1, 2, 0.5) - self.falloffMap[i]
 
 			local _, biomeName, levelName = getBiome(humidity, temperature)
