@@ -22,9 +22,11 @@ ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 		if not raycastResult then
 			return
 		end
-		local position = replica.Data.Map:SnapToGrid(raycastResult.Position)
-		replica.Data.Map.hoveredTile = replica.Data.Map:GridPosFromWorldPos(position)
-		HoveredTileBox.Text = `Hovered Tile:  {replica.Data.Map.hoveredTile}`
+		local hoveredTile = replica.Data.Map:GridPosFromWorldPos(replica.Data.Map:SnapToGrid(raycastResult.Position))
+		local building = replica.Data.Map.buildingMap[hoveredTile.X][hoveredTile.Y]
+		replica.Data.Map.hoveredTile = hoveredTile
+		HoveredTileBox.Text =
+			`Hovered Tile:  {replica.Data.Map.hoveredTile}\nBuilding: {building and building.Name or "None"}`
 		HoveredTileBox.Position = UDim2.fromOffset(Mouse.X, Mouse.Y)
 	end)
 end)

@@ -190,7 +190,7 @@ function BuildController.PlaceRoad(self: BuildController, building: Building.Bui
 			local position = map:WorldPosFromGridPos(point) + Vector3.yAxis
 			road.Model:PivotTo(CFrame.new(position))
 		end
-		self:RedrawRoads(building)
+		self:RedrawRoads()
 	end)
 	ContextActionService:BindAction("PlaceRoad", function(_, inputState)
 		if inputState ~= Enum.UserInputState.End then
@@ -212,6 +212,8 @@ function BuildController.PlaceRoad(self: BuildController, building: Building.Bui
 		for _, road: Building.Building in self.PlannedRoads do
 			road.Model.SelectionBox:Destroy()
 
+			map.buildingMap[road.GridPosition.X][road.GridPosition.Y] = road
+			road.IsPlaced = true
 			road.Placed:Fire()
 			if instantBuild then
 				road:Complete()
@@ -221,44 +223,48 @@ function BuildController.PlaceRoad(self: BuildController, building: Building.Bui
 	end, false, Enum.UserInputType.MouseButton1)
 end
 
-function BuildController.RedrawRoads(self: BuildController, road: Building.Building)
-	local closedSet = {}
-	local openSet = { road }
+function BuildController._RedrawRoad(self: BuildController, currentRoad: Building.Building)
 	local map = MapController.MapReplica.Data.Map :: WorldMap.WorldMap
-	while #openSet ~= 0 do
-		local currentRoad = openSet[1]
-		for _, roadConnection in currentRoad.Model:GetChildren() do
-			if roadConnection.Name ~= "RoadConnection" then
-				continue
-			end
-			roadConnection:Destroy()
-		end
-		for _, direction in DIRECTIONS do
-			local neighborPosition = currentRoad.GridPosition + direction
-			local neighborRoad = map.buildingMap[neighborPosition.X][neighborPosition.Y]
-				or self.PlannedRoadsMap[neighborPosition.X]
-					and self.PlannedRoadsMap[neighborPosition.X][neighborPosition.Y]
-			if not (neighborRoad and neighborRoad.Name == "Road") then
-				continue
-			end
-			if not table.find(closedSet, neighborRoad) then
-				table.insert(openSet, neighborRoad)
-			end
 
-			local roadConnection = RoadConnection:Clone()
-			roadConnection:PivotTo(
-				CFrame.lookAlong(
-					map:WorldPosFromGridPos(currentRoad.GridPosition)
-						+ Vector3.new(direction.X * 0.425, 1, direction.Y * 0.425),
-					Vector3.new(direction.X, 0, direction.Y)
-				)
+	for _, roadConnection in currentRoad.Model:GetChildren() do
+		if roadConnection.Name ~= "RoadConnection" then
+			continue
+		end
+		roadConnection:Destroy()
+	end
+	for _, direction in DIRECTIONS do
+		local neighborPosition = currentRoad.GridPosition + direction
+		local neighborRoad = map.buildingMap[neighborPosition.X][neighborPosition.Y]
+			or self.PlannedRoadsMap[neighborPosition.X]
+				and self.PlannedRoadsMap[neighborPosition.X][neighborPosition.Y]
+		if not (neighborRoad and neighborRoad.Name == "Road") then
+			continue
+		end
+
+		local roadConnection = RoadConnection:Clone()
+		roadConnection:PivotTo(
+			CFrame.lookAlong(
+				map:WorldPosFromGridPos(currentRoad.GridPosition)
+					+ Vector3.new(direction.X * 0.425, 1, direction.Y * 0.425),
+				Vector3.new(direction.X, 0, direction.Y)
 			)
+		)
+		if not currentRoad.IsPlaced then
 			roadConnection.Transparency = 0.25
-			roadConnection.Parent = currentRoad.Model
 		end
+		roadConnection.Parent = currentRoad.Model
+	end
+end
 
-		table.insert(closedSet, currentRoad)
-		table.remove(openSet, 1)
+function BuildController.RedrawRoads(self: BuildController)
+	local map = MapController.MapReplica.Data.Map :: WorldMap.WorldMap
+	for _, roads in map.buildingMap do
+		for _, road in roads do
+			self:_RedrawRoad(road)
+		end
+	end
+	for _, road in self.PlannedRoads do
+		self:_RedrawRoad(road)
 	end
 end
 
