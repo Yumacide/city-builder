@@ -1,7 +1,7 @@
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PathNode = require(script.Parent.PathNode)
+local Building = require(script.Parent.Building)
 
 local MapFolder = workspace.Map
 
@@ -59,7 +59,7 @@ local function drawOcean(origin: Vector3, width: number, height: number)
 	part.Parent = workspace.Map
 end
 
-local function reverse(t: table)
+local function reverse(t: { any })
 	local reversed = {}
 	for i = #t, 1, -1 do
 		table.insert(reversed, t[i])
@@ -77,7 +77,9 @@ function WorldMap.new(origin: Vector3, width: number, height: number)
 	self.tileMap = table.create(width)
 	self.terrainMap = table.create(width)
 	self.featureMap = table.create(width)
+	self.buildingMap = table.create(width) :: { { Building.Building } }
 	self.falloffMap = generateFalloff(width)
+	self.hoveredTile = Vector2int16.new(0, 0)
 	self._partCount = 0
 
 	return self
@@ -151,21 +153,6 @@ function WorldMap.SnapToGrid(self: WorldMap, position: Vector3)
 	)
 end
 
-function WorldMap.GetHoveredTile(self: WorldMap): Vector2int16?
-	local Player = Players.LocalPlayer
-	local Mouse = Player:GetMouse()
-	local ray = workspace.CurrentCamera:ScreenPointToRay(Mouse.X, Mouse.Y)
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterDescendantsInstances = { workspace.Map.Tiles }
-	raycastParams.FilterType = Enum.RaycastFilterType.Whitelist
-	local raycastResult = workspace:Raycast(ray.Origin, ray.Direction * 100, RaycastParams.new())
-	if not raycastResult then
-		return nil
-	end
-	local position = self:SnapToGrid(raycastResult.Position)
-	return self:GridPosFromWorldPos(position)
-end
-
 function WorldMap.Generate(self: WorldMap)
 	MapFolder:SetAttribute("Origin", self.origin)
 	MapFolder:SetAttribute("Width", self.width)
@@ -178,6 +165,7 @@ function WorldMap.Generate(self: WorldMap)
 		self.tileMap[x] = table.create(self.height)
 		self.featureMap[x] = table.create(self.height)
 		self.terrainMap[x] = table.create(self.height)
+		self.buildingMap[x] = table.create(self.height)
 		for z = 1, self.height do
 			local noise = math.noise(self.seed, x / 40, z / 40) - self.falloffMap[x][z]
 			self.terrainMap[x][z] = if noise > TREE_THRESHOLD
@@ -272,6 +260,7 @@ function WorldMap.FindPath(self: WorldMap, start: Vector2int16, goal: Vector2int
 			end
 		end
 	end
+	return
 end
 
 export type WorldMap = typeof(WorldMap.new(Vector3.zero, 0, 0))

@@ -5,7 +5,8 @@ local StarterGui = game:GetService("StarterGui")
 local Player = Players.LocalPlayer
 local PlayerGui = Player.PlayerGui
 
-local Building = require(ReplicatedStorage.Common:WaitForChild("Building"))
+local BuildController = require(script.Parent:WaitForChild("Controllers").BuildController)
+local Building = require(ReplicatedStorage.Common.Building)
 
 task.wait(1) -- hack
 for _, child in StarterGui:GetChildren() do
@@ -39,7 +40,7 @@ for _, frame in buildMenu:GetChildren() do
 		end
 
 		selectedBuilding = Building.new(frame.Name)
-		selectedBuilding:Plan(true)
+		BuildController:Plan(selectedBuilding, true)
 		currentButton = button
 
 		selectedBuilding.Placed:Connect(function()
