@@ -15,6 +15,18 @@ ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 
 	local map = replica.Data.Map
 	setmetatable(map, WorldMap)
+
+	-- ReplicaService occasionally decides to cast the Z value to a string.
+	-- I figured out a fix for this 2 years ago, but I forgot what it was, so this is a band-aid fix.
+	for x, row in map.featureMap do
+		for z, feature in row do
+			if typeof(z) == "string" then
+				map.featureMap[x][z] = nil
+				map.featureMap[x][tonumber(z)] = feature
+			end
+		end
+	end
+
 	RunService:BindToRenderStep("GetHoveredTile", 1, function()
 		local ray = workspace.CurrentCamera:ScreenPointToRay(Mouse.X, Mouse.Y)
 		local raycastParams = RaycastParams.new()

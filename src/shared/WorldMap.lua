@@ -214,15 +214,6 @@ end
 
 -- TODO: Optimize
 function WorldMap.FindPath(self: WorldMap, start: Vector2int16, goal: Vector2int16): { Vector2int16 }?
-	-- ReplicaService occasionally decides to cast the Z value to a string. This is a band-aid fix.
-	for x, row in self.featureMap do
-		for z, feature in row do
-			if typeof(z) == "string" then
-				self.featureMap[x][tonumber(z)] = feature
-			end
-		end
-	end
-
 	if not self:IsWalkable(start.X, start.Y) or not self:IsWalkable(goal.X, goal.Y) then
 		return nil
 	end
