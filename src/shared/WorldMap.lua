@@ -90,16 +90,23 @@ function WorldMap.IsWalkable(self: WorldMap, x: number, z: number): boolean
 	return terrainType ~= TerrainType.Ocean and terrainType ~= TerrainType.Shore and not self.featureMap[x][z]
 end
 
+function WorldMap.CanBuild(self: WorldMap, building: Building.Building)
+	return not (
+		self.featureMap[building.GridPosition.X]
+			and self.featureMap[building.GridPosition.X][building.GridPosition.Y]
+		or self.buildingMap[building.GridPosition.X]
+			and self.buildingMap[building.GridPosition.X][building.GridPosition.Y]
+	)
+end
+
 function WorldMap._DrawTree(self: WorldMap, x: number, z: number)
 	if typeof(x) ~= "number" or typeof(z) ~= "number" then
 		error("Invalid arguments to _DrawTree")
 	end
 	local tree: Model = TreeModel:Clone()
-	tree:PivotTo(CFrame.new(self.origin + Vector3.new(x, 1.5, z)))
+	local _, size = tree:GetBoundingBox()
+	tree:PivotTo(CFrame.new(self.origin + Vector3.new(x, 0.5 + size.Y / 2, z)))
 	self.featureMap[x][z] = tree
-	if typeof(z) == "string" then
-		error("Found string" .. x .. " " .. z)
-	end
 	tree.Parent = workspace.Map.Features
 end
 

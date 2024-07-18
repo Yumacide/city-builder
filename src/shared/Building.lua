@@ -87,14 +87,6 @@ function Building.Destroy(self: Building)
 		RunService:UnbindFromRenderStep("UpdateBuildingPivot")
 	end
 	self.Destroying:Fire()
-	-- TODO: building.Data.Roads and put it in BuildController instead
-	if self.Data.Roads then
-		print("unbinding extend")
-		RunService:UnbindFromRenderStep("ExtendRoad")
-		for _, road in self.Data.Roads do
-			road:Destroy()
-		end
-	end
 	self.Maid:Destroy()
 end
 

@@ -1,5 +1,4 @@
 local ContextActionService = game:GetService("ContextActionService")
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
@@ -7,9 +6,6 @@ local WorldMap = require(ReplicatedStorage.Common.WorldMap)
 local Building = require(ReplicatedStorage.Common.Building)
 local MapController = require(script.Parent.MapController)
 local Map = workspace:WaitForChild("Map")
-
-local Player = Players.LocalPlayer
-local Mouse = Player:GetMouse()
 
 local RoadConnection = ReplicatedStorage.Assets.Buildings:WaitForChild("RoadConnection")
 
@@ -29,15 +25,15 @@ export type BuildController = typeof(BuildController)
 function BuildController.Plan(self: BuildController, building: Building.Building, bindControls: boolean)
 	local map: WorldMap.WorldMap = MapController.MapReplica.Data.Map
 	building.IsSelected = true
-	local selectionBox = Instance.new("SelectionBox")
-	selectionBox.LineThickness = 0.01
-	selectionBox.Transparency = 0.5
-	selectionBox.Adornee = building.Model.BoundingBox
-	selectionBox.Parent = building.Model
-	for _, part: Part in building.Model:GetDescendants() do
-		if part:IsA("BasePart") and part.Name ~= "BoundingBox" then
-			part.Transparency = 0.25
-		end
+
+	local highlight = Instance.new("Highlight")
+	highlight.Adornee = building.Model
+	highlight.FillColor = Color3.new(1, 1, 1)
+	highlight.FillTransparency = 0.9
+	highlight.Enabled = true
+	highlight.Parent = building.Model
+	if not map:CanBuild(building) then
+		highlight.OutlineColor = Color3.new(1, 0, 0)
 	end
 	building.Model.Parent = Map.Buildings
 
@@ -63,17 +59,25 @@ function BuildController.Plan(self: BuildController, building: Building.Building
 		if inputState ~= Enum.UserInputState.End then
 			return
 		end
-		print("canceling")
+		for _, road in self.PlannedRoads do
+			road:Destroy()
+		end
+		table.clear(self.PlannedRoads)
+		table.clear(self.PlannedRoadsMap)
 		building:Destroy()
 	end, false, Enum.KeyCode.F)
 
 	RunService:BindToRenderStep("MoveBuilding", 1, function()
-		-- TODO: raycast to filter non-tiles instead
-		local target = Mouse.Target
-		if target.Parent ~= workspace.Map.Tiles then
+		if map.hoveredTile == building.GridPosition then
 			return
 		end
 		building.GridPosition = map.hoveredTile
+		if map:CanBuild(building) then
+			highlight.OutlineColor = Color3.new(1, 1, 1)
+		else
+			highlight.OutlineColor = Color3.new(1, 0, 0)
+		end
+
 		building.Data.GoalPivot = CFrame.new(
 			map:WorldPosFromGridPos(map.hoveredTile)
 				+ Vector3.new(
@@ -84,12 +88,11 @@ function BuildController.Plan(self: BuildController, building: Building.Building
 		) * (building.Model:GetPivot() - building.Model:GetPivot().Position)
 	end)
 
-	-- this sucks, use this video to do it properly: https://www.youtube.com/watch?v=Db3LooLQM1Q&t=590s
 	RunService:BindToRenderStep("UpdateBuildingPivot", 2, function(deltaTime)
 		local positionGoal = building.Data.GoalPivot.Position
 		local angleGoal = building.Data.AngleGoal
 
-		local previousAngleGoal = building.AngleSpring.Target -- use later
+		local previousAngleGoal = building.AngleSpring.Target
 
 		local delta = angleGoal - previousAngleGoal
 		if delta > math.pi then
@@ -111,11 +114,9 @@ function BuildController.Plan(self: BuildController, building: Building.Building
 end
 
 function BuildController.Place(self: BuildController, building: Building.Building, instantBuild: boolean)
+	local map: WorldMap.WorldMap = MapController.MapReplica.Data.Map
 	building.Model.Parent = Map.Buildings
 	building.IsPlaced = true
-
-	local map: WorldMap.WorldMap = MapController.MapReplica.Data.Map
-	map.buildingMap[building.GridPosition.X][building.GridPosition.Y] = building
 
 	ContextActionService:UnbindAction("RotateBuilding")
 	ContextActionService:UnbindAction("PlaceBuilding")
@@ -127,8 +128,14 @@ function BuildController.Place(self: BuildController, building: Building.Buildin
 		return
 	end
 	ContextActionService:UnbindAction("CancelBuilding")
-	building.Model.SelectionBox:Destroy()
 
+	if not map:CanBuild(building) then
+		building.Model:Destroy()
+		return
+	end
+
+	map.buildingMap[building.GridPosition.X][building.GridPosition.Y] = building
+	building.Model.Highlight:Destroy()
 	building.Placed:Fire()
 	if instantBuild then
 		building:Complete()
@@ -140,12 +147,6 @@ function BuildController.PlaceRoad(self: BuildController, building: Building.Bui
 	local map: WorldMap.WorldMap = setmetatable(MapController.MapReplica.Data.Map, WorldMap)
 	local start = building.GridPosition
 	local goal: Vector2int16
-	building.Model.SelectionBox.Color = BrickColor.Black()
-
-	if not self.PlannedRoadsMap[start.X] then
-		self.PlannedRoadsMap[start.X] = {}
-	end
-	self.PlannedRoadsMap[start.X][start.Y] = building
 
 	RunService:BindToRenderStep("ExtendRoad", 1, function()
 		local currentGoal = map.hoveredTile
@@ -155,10 +156,18 @@ function BuildController.PlaceRoad(self: BuildController, building: Building.Bui
 		goal = currentGoal
 
 		for _, road: Building.Building in self.PlannedRoads do
-			road:Destroy()
+			if road ~= building then
+				road:Destroy()
+			end
 		end
 		table.clear(self.PlannedRoads)
 		table.clear(self.PlannedRoadsMap)
+
+		table.insert(self.PlannedRoads, building)
+		if not self.PlannedRoadsMap[start.X] then
+			self.PlannedRoadsMap[start.X] = {}
+		end
+		self.PlannedRoadsMap[start.X][start.Y] = building
 
 		local path = {}
 		local offset = goal - start
@@ -173,14 +182,11 @@ function BuildController.PlaceRoad(self: BuildController, building: Building.Bui
 		end
 
 		for _, point in path do
-			-- local nextPoint = path[i + 1]
 			local road = Building.new("Road")
 			road.GridPosition = point
 			self:Plan(road, false)
-			if point == goal then
-				road.Model.SelectionBox.Color = BrickColor.Red()
-			end
 			table.insert(self.PlannedRoads, road)
+			road.Model.Parent = Map.Buildings.PlannedRoads
 
 			if not self.PlannedRoadsMap[point.X] then
 				self.PlannedRoadsMap[point.X] = {}
@@ -196,29 +202,29 @@ function BuildController.PlaceRoad(self: BuildController, building: Building.Bui
 		if inputState ~= Enum.UserInputState.End then
 			return
 		end
-
 		ContextActionService:UnbindAction("CancelBuilding")
 		ContextActionService:UnbindAction("PlaceRoad")
 		RunService:UnbindFromRenderStep("ExtendRoad")
 		-- TODO: wait until its done moving
 		RunService:UnbindFromRenderStep("UpdateBuildingPivot")
 
-		building.Model.SelectionBox:Destroy()
-		building.Placed:Fire()
-		if instantBuild then
-			building:Complete()
-		end
-
 		for _, road: Building.Building in self.PlannedRoads do
-			road.Model.SelectionBox:Destroy()
+			if not map:CanBuild(road) then
+				road.Model:Destroy()
+				continue
+			end
 
 			map.buildingMap[road.GridPosition.X][road.GridPosition.Y] = road
+
 			road.IsPlaced = true
+			road.Model.Highlight:Destroy()
+			road.Model.Parent = Map.Buildings
 			road.Placed:Fire()
 			if instantBuild then
 				road:Complete()
 			end
 		end
+
 		table.clear(self.PlannedRoads)
 	end, false, Enum.UserInputType.MouseButton1)
 end
@@ -249,9 +255,6 @@ function BuildController._RedrawRoad(self: BuildController, currentRoad: Buildin
 				Vector3.new(direction.X, 0, direction.Y)
 			)
 		)
-		if not currentRoad.IsPlaced then
-			roadConnection.Transparency = 0.25
-		end
 		roadConnection.Parent = currentRoad.Model
 	end
 end

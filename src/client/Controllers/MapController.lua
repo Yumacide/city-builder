@@ -12,7 +12,9 @@ local MapController = {}
 ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 	local HoveredTileBox: TextBox = Player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("HoveredTile")
 	MapController.MapReplica = replica
-	setmetatable(replica.Data.Map, WorldMap)
+
+	local map = replica.Data.Map
+	setmetatable(map, WorldMap)
 	RunService:BindToRenderStep("GetHoveredTile", 1, function()
 		local ray = workspace.CurrentCamera:ScreenPointToRay(Mouse.X, Mouse.Y)
 		local raycastParams = RaycastParams.new()
@@ -22,12 +24,13 @@ ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 		if not raycastResult then
 			return
 		end
-		local hoveredTile = replica.Data.Map:GridPosFromWorldPos(replica.Data.Map:SnapToGrid(raycastResult.Position))
-		local building = replica.Data.Map.buildingMap[hoveredTile.X][hoveredTile.Y]
-		replica.Data.Map.hoveredTile = hoveredTile
+		local hoveredTile = map:GridPosFromWorldPos(map:SnapToGrid(raycastResult.Position))
+		local building = map.buildingMap[hoveredTile.X][hoveredTile.Y]
+		local feature = map.featureMap[hoveredTile.X][hoveredTile.Y]
+		map.hoveredTile = hoveredTile
 		HoveredTileBox.Text =
-			`Hovered Tile:  {replica.Data.Map.hoveredTile}\nBuilding: {building and building.Name or "None"}`
-		HoveredTileBox.Position = UDim2.fromOffset(Mouse.X, Mouse.Y)
+			`Hovered Tile:  {map.hoveredTile}\n{building and building.Name or feature and feature.Name or "None"}`
+		HoveredTileBox.Position = UDim2.new(0.015, Mouse.X, -0.01, Mouse.Y)
 	end)
 end)
 
