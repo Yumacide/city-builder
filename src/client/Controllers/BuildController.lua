@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local WorldMap = require(ReplicatedStorage.Common.WorldMap)
 local Building = require(ReplicatedStorage.Common.Building)
 local MapController = require(script.Parent.MapController)
+local PersonController = require(script.Parent.PersonController)
 local Map = workspace:WaitForChild("Map")
 
 local RoadConnection = ReplicatedStorage.Assets.Buildings:WaitForChild("RoadConnection")
@@ -139,6 +140,16 @@ function BuildController.Place(self: BuildController, building: Building.Buildin
 	building.Placed:Fire()
 	if instantBuild then
 		building:Complete()
+		if Building.BuildingData[building.Name].OnComplete then
+			Building.BuildingData[building.Name].OnComplete(building, map)
+		end
+
+		-- Remove after implementing visits.
+		if building.Name == "Hovel" then
+			for _ = 1, 5 do
+				PersonController:AddPerson(building)
+			end
+		end
 	end
 end
 

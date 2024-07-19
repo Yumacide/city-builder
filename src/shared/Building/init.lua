@@ -11,27 +11,14 @@ local Spring = require(ReplicatedStorage.Common.Libraries:WaitForChild("Spring")
 local Building = {}
 Building.__index = Building
 
-local BuildingData = {
-	Road = {
-		Size = Vector3.new(1, 1, 1),
-		Resources = {
-			Wood = 1,
-		},
-	},
-	Keep = {
-		Size = Vector3.new(2, 2, 2),
-		Resources = {
-			Wood = 1,
-		},
-	},
-}
+Building.BuildingData = require(script.BuildingData)
 
 function Building.new(name: string)
 	local self = setmetatable({}, Building)
 
 	self.Name = name
-	self.Size = BuildingData[name].Size
-	self.ResourcesNeeded = table.clone(BuildingData[name].Resources)
+	self.Size = Building.BuildingData[name].Size
+	self.ResourcesNeeded = table.clone(Building.BuildingData[name].Resources)
 	self.ResourcesStored = {}
 	self.IsSelected = false
 	self.IsPlaced = false
@@ -41,10 +28,17 @@ function Building.new(name: string)
 	self.Model = ReplicatedStorage.Assets.Buildings[name]:Clone() :: Model
 	self.Maid = Maid.new()
 	self.Placed = Signal.new()
+	self.Completed = Signal.new()
 	self.Destroying = Signal.new()
 	self.PositionSpring = Spring.new(Vector3.zero)
 	self.AngleSpring = Spring.new(0)
 	self.Maid:GiveTask(self.Model)
+
+	for _, part: BasePart in self.Model:GetChildren() do
+		if part:IsA("BasePart") then
+			part.CollisionGroup = "Building"
+		end
+	end
 
 	self.Data.PreviousGoalPivot = self.Model:GetPivot()
 	self.PositionSpring.Speed = 10
@@ -75,6 +69,7 @@ function Building.Complete(self: Building)
 			part.Transparency = 0
 		end
 	end
+	self.Completed:Fire()
 end
 
 function Building.Destroy(self: Building)
@@ -83,7 +78,6 @@ function Building.Destroy(self: Building)
 		ContextActionService:UnbindAction("PlaceBuilding")
 		--ContextActionService:UnbindAction("CancelBuilding")
 		RunService:UnbindFromRenderStep("MoveBuilding")
-		-- TODO: wait until its done moving
 		RunService:UnbindFromRenderStep("UpdateBuildingPivot")
 	end
 	self.Destroying:Fire()

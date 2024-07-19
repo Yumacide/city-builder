@@ -3,18 +3,28 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local ReplicaController = require(ReplicatedStorage.Common.Libraries.ReplicaController)
 local WorldMap = require(ReplicatedStorage.Common.WorldMap)
+local Signal = require(ReplicatedStorage.Packages.Signal)
 
 local Player = Players.LocalPlayer
 local Mouse = Player:GetMouse()
 
-local MapController = {}
+local MapFolder = workspace.Map
+local ScreenGui = Player.PlayerGui:WaitForChild("ScreenGui")
+local HoveredTileLabel: TextLabel = ScreenGui:WaitForChild("HoveredTile")
+local PopulationLabel: TextLabel = ScreenGui:WaitForChild("Population")
+
+local MapController = { MapCreated = Signal.new() }
+
+function MapController.GetMap(self)
+	return self.MapReplica and self.MapReplica.Data.Map or self.MapCreated:Wait()
+end
 
 ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
-	local HoveredTileBox: TextBox = Player.PlayerGui:WaitForChild("ScreenGui"):WaitForChild("HoveredTile")
 	MapController.MapReplica = replica
 
 	local map = replica.Data.Map
 	setmetatable(map, WorldMap)
+	MapController.MapCreated:Fire(map)
 
 	-- ReplicaService occasionally decides to cast the Z value to a string.
 	-- I figured out a fix for this 2 years ago, but I forgot what it was, so this is a band-aid fix.
@@ -40,11 +50,18 @@ ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 		local building = map.buildingMap[hoveredTile.X][hoveredTile.Y]
 		local feature = map.featureMap[hoveredTile.X][hoveredTile.Y]
 		map.hoveredTile = hoveredTile
-		HoveredTileBox.Text =
+		HoveredTileLabel.Text =
 			`Hovered Tile:  {map.hoveredTile}\n{building and building.Name or feature and feature.Name or "None"}`
-		HoveredTileBox.Position = UDim2.new(0.015, Mouse.X, -0.01, Mouse.Y)
+		HoveredTileLabel.Position = UDim2.new(0.015, Mouse.X, -0.01, Mouse.Y)
 	end)
 end)
+
+local function updatePopulationLabel()
+	PopulationLabel.Text = `Population:  {MapFolder:GetAttribute("Population")}/{MapFolder:GetAttribute("Capacity")}`
+end
+
+MapFolder:GetAttributeChangedSignal("Capacity"):Connect(updatePopulationLabel)
+MapFolder:GetAttributeChangedSignal("Population"):Connect(updatePopulationLabel)
 
 ReplicaController.RequestData()
 

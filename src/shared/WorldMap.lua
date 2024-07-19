@@ -261,6 +261,19 @@ function WorldMap.FindPath(self: WorldMap, start: Vector2int16, goal: Vector2int
 	return
 end
 
+function WorldMap.UpdateCapacity(self: WorldMap)
+	local capacity = 0
+	for _, row in self.buildingMap do
+		for _, building in row do
+			if building.Name == "Hovel" then
+				capacity += 5
+			end
+		end
+	end
+	MapFolder:SetAttribute("Capacity", capacity)
+	MapFolder:SetAttribute("Population", capacity) -- Until I implement visits.
+end
+
 export type WorldMap = typeof(WorldMap.new(Vector3.zero, 0, 0))
 
 return WorldMap
