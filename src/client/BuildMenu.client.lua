@@ -1,17 +1,11 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
 
 local Player = Players.LocalPlayer
 local PlayerGui = Player.PlayerGui
 
 local BuildController = require(script.Parent:WaitForChild("Controllers").BuildController)
 local Building = require(ReplicatedStorage.Common.Building)
-
-task.wait(1) -- hack
-for _, child in StarterGui:GetChildren() do
-	child.Parent = PlayerGui
-end
 
 local buildButton = PlayerGui:WaitForChild("ScreenGui"):WaitForChild("BuildButton")
 local buildMenu = PlayerGui:WaitForChild("ScreenGui"):WaitForChild("BuildMenu")
@@ -23,12 +17,18 @@ end)
 
 local currentButton: TextButton?
 local selectedBuilding: Building.Building?
-for _, frame in buildMenu:GetChildren() do
-	local button = frame:FindFirstChild("TextButton")
-	if not button then
-		continue
-	end
-	-- TODO: move building to selected tile
+for name, _building in Building.BuildingData do
+	local frame = Instance.new("Frame")
+	frame.Name = name
+	frame.Size = UDim2.fromScale(0.169, 0.85)
+	local button = Instance.new("TextButton")
+	button.Text = name
+	button.Size = UDim2.fromScale(1, 1)
+	button.TextScaled = true
+	button.TextColor3 = Color3.new(0, 0, 0)
+	button.Parent = frame
+	frame.Parent = buildMenu
+
 	button.Activated:Connect(function()
 		if currentButton then
 			selectedBuilding:Destroy()
