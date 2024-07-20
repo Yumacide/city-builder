@@ -106,7 +106,7 @@ ContextActionService:BindAction("ToggleCutTree", function(_, inputState: Enum.Us
 		return
 	end
 
-	local map = MapController.MapReplica.Data.Map
+	local map = MapController:GetMap()
 	if isCuttingTree then
 		isCuttingTree = false
 		print("Tree cutting mode off")

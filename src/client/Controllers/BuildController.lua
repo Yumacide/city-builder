@@ -24,7 +24,7 @@ local BuildController = {
 export type BuildController = typeof(BuildController)
 
 function BuildController.Plan(self: BuildController, building: Building.Building, bindControls: boolean)
-	local map: WorldMap.WorldMap = MapController.MapReplica.Data.Map
+	local map: WorldMap.WorldMap = MapController:GetMap()
 	building.IsSelected = true
 
 	local highlight = Instance.new("Highlight")
@@ -115,7 +115,7 @@ function BuildController.Plan(self: BuildController, building: Building.Building
 end
 
 function BuildController.Place(self: BuildController, building: Building.Building, instantBuild: boolean)
-	local map: WorldMap.WorldMap = MapController.MapReplica.Data.Map
+	local map: WorldMap.WorldMap = MapController:GetMap()
 	building.Model.Parent = Map.Buildings
 	building.IsPlaced = true
 
@@ -241,7 +241,7 @@ function BuildController.PlaceRoad(self: BuildController, building: Building.Bui
 end
 
 function BuildController._RedrawRoad(self: BuildController, currentRoad: Building.Building)
-	local map = MapController.MapReplica.Data.Map :: WorldMap.WorldMap
+	local map = MapController:GetMap()
 
 	for _, roadConnection in currentRoad.Model:GetChildren() do
 		if roadConnection.Name ~= "RoadConnection" then
@@ -271,7 +271,7 @@ function BuildController._RedrawRoad(self: BuildController, currentRoad: Buildin
 end
 
 function BuildController.RedrawRoads(self: BuildController)
-	local map = MapController.MapReplica.Data.Map :: WorldMap.WorldMap
+	local map = MapController:GetMap()
 	for _, roads in map.buildingMap do
 		for _, road in roads do
 			self:_RedrawRoad(road)
