@@ -12,12 +12,12 @@ local MapService = {}
 Players.PlayerAdded:Connect(function(player)
 	local map = WorldMap.new(Vector3.new(0, 1, 0), 250, 250)
 	MapService.WorldMap = map
-	map:Generate()
+	map:Generate(false)
 	warn("Part count: " .. map._partCount)
 
 	ReplicaService.NewReplica({
 		ClassToken = ReplicaService.NewClassToken("MapReplica"),
-		Data = { Owner = player, Map = map },
+		Data = { Map = map },
 		Replication = { [player] = true },
 	})
 end)

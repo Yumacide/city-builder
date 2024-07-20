@@ -18,14 +18,19 @@ local PopulationLabel: TextLabel = ScreenGui:WaitForChild("Population")
 local MapController = { MapCreated = Signal.new() }
 
 function MapController.GetMap(self): WorldMap.WorldMap
-	return self.MapReplica and self.MapReplica.Data.Map or self.MapCreated:Wait()
+	return self.ClientMap or self.MapCreated:Wait()
 end
 
 ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 	MapController.MapReplica = replica
 
-	local map = replica.Data.Map
-	setmetatable(map, WorldMap)
+	local serverMap = replica.Data.Map
+	setmetatable(serverMap, WorldMap)
+
+	local map = WorldMap.new(serverMap.origin, serverMap.width, serverMap.height)
+	map.seed = map.seed
+	map:Generate(true)
+	MapController.ClientMap = map
 	MapController.MapCreated:Fire(map)
 
 	-- ReplicaService occasionally decides to cast the Z value to a string.

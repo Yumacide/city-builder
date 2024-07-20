@@ -154,7 +154,7 @@ ContextActionService:BindAction("ToggleCutTree", function(_, inputState: Enum.Us
 			return
 		end
 		local tree = map.featureMap[map.hoveredTile.X] and map.featureMap[map.hoveredTile.X][map.hoveredTile.Y]
-		if tree and tree.Name == "TreeModel" then
+		if tree and tree.Name == "Tree" then
 			for _, _task in PersonController.Tasks do
 				if _task.Type == "CutTree" and _task.Location == map.hoveredTile then
 					return

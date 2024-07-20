@@ -17,7 +17,7 @@ local TerrainType = {
 	Ocean = 5,
 }
 
-local TreeModel = ReplicatedStorage.Assets.TreeModel
+local TreeModel = ReplicatedStorage.Assets.Tree
 
 local WorldMap = {}
 WorldMap.__index = WorldMap
@@ -181,12 +181,7 @@ function WorldMap.SnapToGrid(self: WorldMap, position: Vector3)
 	)
 end
 
-function WorldMap.Generate(self: WorldMap)
-	MapFolder:SetAttribute("Origin", self.origin)
-	MapFolder:SetAttribute("Width", self.width)
-	MapFolder:SetAttribute("Height", self.height)
-	MapFolder:SetAttribute("Seed", self.seed)
-
+function WorldMap.Generate(self: WorldMap, shouldDraw: boolean)
 	drawOcean(self.origin, self.width, self.height)
 
 	for x = 1, self.width do
@@ -202,19 +197,20 @@ function WorldMap.Generate(self: WorldMap)
 				elseif noise > SAND_THRESHOLD then TerrainType.Sand
 				elseif noise > SHORE_THRESHOLD then TerrainType.Shore
 				else TerrainType.Ocean
-			self:_Draw(x, z)
-		end
-		if x % 20 == 0 then
-			task.wait()
+			if shouldDraw then
+				self:_Draw(x, z)
+			end
 		end
 	end
 
-	for x = 1, self.width do
-		for z = 1, self.height do
-			self.tileMap[x][z].Parent = workspace.Map.Tiles
-		end
-		if x % 20 == 0 then
-			task.wait()
+	if shouldDraw then
+		for x = 1, self.width do
+			for z = 1, self.height do
+				self.tileMap[x][z].Parent = workspace.Map.Tiles
+			end
+			if x % 20 == 0 then
+				task.wait()
+			end
 		end
 	end
 
