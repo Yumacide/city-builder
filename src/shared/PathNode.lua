@@ -24,6 +24,10 @@ function PathNode:GetNeighbors(): { PathNode }
 		PathNode.new(Vector2int16.new(self.Position.X - 1, self.Position.Y)),
 		PathNode.new(Vector2int16.new(self.Position.X, self.Position.Y + 1)),
 		PathNode.new(Vector2int16.new(self.Position.X, self.Position.Y - 1)),
+		PathNode.new(Vector2int16.new(self.Position.X + 1, self.Position.Y + 1)),
+		PathNode.new(Vector2int16.new(self.Position.X - 1, self.Position.Y - 1)),
+		PathNode.new(Vector2int16.new(self.Position.X + 1, self.Position.Y - 1)),
+		PathNode.new(Vector2int16.new(self.Position.X - 1, self.Position.Y + 1)),
 	}
 end
 

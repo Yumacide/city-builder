@@ -99,7 +99,7 @@ end
 
 function WorldMap.IsWalkable(self: WorldMap, x: number, z: number): boolean
 	local terrainType = self.terrainMap[x][z]
-	return terrainType ~= TerrainType.Ocean and terrainType ~= TerrainType.Shore and not self.featureMap[x][z]
+	return terrainType ~= TerrainType.Ocean and terrainType ~= TerrainType.Shore --and not self.featureMap[x][z]
 end
 
 function WorldMap.CanBuild(self: WorldMap, building: Building.Building)
@@ -233,12 +233,8 @@ function WorldMap.WorldPosFromGridPos(self: WorldMap, gridPos: Vector2int16)
 	return self.origin + Vector3.new(gridPos.X, 0, gridPos.Y)
 end
 
--- TODO: Optimize
+-- TODO: Make it so that a person doesn't have to move tile-by-tile
 function WorldMap.FindPath(self: WorldMap, start: Vector2int16, goal: Vector2int16): { Vector2int16 }?
-	if not self:IsWalkable(start.X, start.Y) or not self:IsWalkable(goal.X, goal.Y) then
-		return nil
-	end
-
 	local openSet = { PathNode.new(start) }
 	local closedSet = {}
 	local path: { Vector2int16 } = {}
