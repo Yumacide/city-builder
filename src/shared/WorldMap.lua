@@ -67,6 +67,18 @@ local function reverse(t: { any })
 	return reversed
 end
 
+local function resizeModel(model: Model, multiplier: Vector3)
+	local primaryPart = model.PrimaryPart
+	for _, part in model:GetDescendants() do
+		if part:IsA("BasePart") then
+			local relativePosition = part.Position - primaryPart.Position
+			local rescaledPosition = relativePosition * multiplier
+			part.Position = rescaledPosition + primaryPart.Position
+			part.Size *= multiplier
+		end
+	end
+end
+
 function WorldMap.new(origin: Vector3, width: number, height: number)
 	local self = setmetatable({}, WorldMap)
 
@@ -104,8 +116,17 @@ function WorldMap._DrawTree(self: WorldMap, x: number, z: number)
 		error("Invalid arguments to _DrawTree")
 	end
 	local tree: Model = TreeModel:Clone()
-	local _, size = tree:GetBoundingBox()
-	tree:PivotTo(CFrame.new(self.origin + Vector3.new(x, 0.5 + size.Y / 2, z)))
+	resizeModel(tree, Vector3.one * (math.random() * 0.3 + 0.7))
+	tree:PivotTo(
+		CFrame.new(
+			self.origin
+				+ Vector3.new(
+					x + math.random() * 0.5 - 0.25,
+					0.5 + (tree.PrimaryPart :: BasePart).Size.Y / 2,
+					z + math.random() * 0.5 - 0.25
+				)
+		) * CFrame.Angles(0, math.random() * math.pi, 0)
+	)
 	self.featureMap[x][z] = tree
 	tree.Parent = workspace.Map.Features
 end
