@@ -135,7 +135,7 @@ function BuildController.Place(self: BuildController, building: Building.Buildin
 		return
 	end
 
-	map.buildingMap[building.GridPosition.X][building.GridPosition.Y] = building
+	map.buildingMap:Set(building.GridPosition.X, building.GridPosition.Y, building)
 	building.Model.Highlight:Destroy()
 	building.Placed:Fire()
 	if instantBuild then
@@ -155,7 +155,7 @@ end
 
 -- TODO: Use a part pool
 function BuildController.PlaceRoad(self: BuildController, building: Building.Building, instantBuild: boolean)
-	local map: WorldMap.WorldMap = setmetatable(MapController.MapReplica.Data.Map, WorldMap)
+	local map: WorldMap.WorldMap = MapController:GetMap()
 	local start = building.GridPosition
 	local goal: Vector2int16
 
@@ -225,7 +225,7 @@ function BuildController.PlaceRoad(self: BuildController, building: Building.Bui
 				continue
 			end
 
-			map.buildingMap[road.GridPosition.X][road.GridPosition.Y] = road
+			map.buildingMap:Set(road.GridPosition.X, road.GridPosition.Y, road)
 
 			road.IsPlaced = true
 			road.Model.Highlight:Destroy()
@@ -251,7 +251,7 @@ function BuildController._RedrawRoad(self: BuildController, currentRoad: Buildin
 	end
 	for _, direction in DIRECTIONS do
 		local neighborPosition = currentRoad.GridPosition + direction
-		local neighborRoad = map.buildingMap[neighborPosition.X][neighborPosition.Y]
+		local neighborRoad = map.buildingMap:Get(neighborPosition.X, neighborPosition.Y)
 			or self.PlannedRoadsMap[neighborPosition.X]
 				and self.PlannedRoadsMap[neighborPosition.X][neighborPosition.Y]
 		if not (neighborRoad and neighborRoad.Name == "Road") then
@@ -272,10 +272,8 @@ end
 
 function BuildController.RedrawRoads(self: BuildController)
 	local map = MapController:GetMap()
-	for _, roads in map.buildingMap do
-		for _, road in roads do
-			self:_RedrawRoad(road)
-		end
+	for _, road in map.buildingMap.Array do
+		self:_RedrawRoad(road)
 	end
 	for _, road in self.PlannedRoads do
 		self:_RedrawRoad(road)

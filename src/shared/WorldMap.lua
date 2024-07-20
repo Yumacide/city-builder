@@ -1,12 +1,15 @@
+--!strict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Array2D = require(script.Parent.Array2D)
 local PathNode = require(script.Parent.PathNode)
 local Building = require(script.Parent.Building)
 
+type Array2D<T> = Array2D.Array2D<T>
+
 local MapFolder = workspace.Map
 
-type Map2D<T> = { { T } }
-
+local TILES_DRAWN_PER_FRAME = 5000
 local TREE_THRESHOLD, GRASS_THRESHOLD, SAND_THRESHOLD, SHORE_THRESHOLD = 0.25, 0, -0.1, -0.2
 
 local TerrainType = {
@@ -29,15 +32,13 @@ local function evaluate(value: number)
 	return value ^ a / (value ^ a + (b - b * value) ^ a)
 end
 
-local function generateFalloff(size: number): Map2D<number>
-	local map = table.create(size)
-	for i = 1, size do
-		map[i] = table.create(size)
-		for j = 1, size do
-			local x = i * 2 / size - 1
-			local z = j * 2 / size - 1
-			map[i][j] = evaluate(math.max(math.abs(x), math.abs(z)))
-		end
+local function generateFalloff(size: number): Array2D<number>
+	local map = Array2D.new(size, size)
+	for n = 1, size ^ 2 do
+		local i, j = map:To2D(n)
+		local x = i * 2 / size - 1
+		local z = j * 2 / size - 1
+		map.Array[n] = evaluate(math.max(math.abs(x), math.abs(z)))
 	end
 	return map
 end
@@ -68,7 +69,7 @@ local function reverse(t: { any })
 end
 
 local function resizeModel(model: Model, multiplier: Vector3)
-	local primaryPart = model.PrimaryPart
+	local primaryPart = model.PrimaryPart :: BasePart
 	for _, part in model:GetDescendants() do
 		if part:IsA("BasePart") then
 			local relativePosition = part.Position - primaryPart.Position
@@ -86,11 +87,11 @@ function WorldMap.new(origin: Vector3, width: number, height: number)
 	self.width = width
 	self.height = height
 	self.seed = Random.new():NextNumber(1, 100000)
-	self.tileMap = table.create(width)
-	self.terrainMap = table.create(width)
-	self.featureMap = table.create(width)
-	self.buildingMap = table.create(width) :: { { Building.Building } }
-	self.falloffMap = generateFalloff(width)
+	self.tileMap = Array2D.new(width, height) :: Array2D<Part>
+	self.terrainMap = Array2D.new(width, height) :: Array2D<number>
+	self.featureMap = Array2D.new(width, height) :: Array2D<Model>
+	self.buildingMap = Array2D.new(width, height) :: Array2D<Building.Building>
+	self.falloffMap = generateFalloff(width) :: Array2D<number>
 	self.hoveredTile = Vector2int16.new(0, 0)
 	self._partCount = 0
 
@@ -98,23 +99,19 @@ function WorldMap.new(origin: Vector3, width: number, height: number)
 end
 
 function WorldMap.IsWalkable(self: WorldMap, x: number, z: number): boolean
-	local terrainType = self.terrainMap[x][z]
-	return terrainType ~= TerrainType.Ocean and terrainType ~= TerrainType.Shore --and not self.featureMap[x][z]
+	local terrainType = self.terrainMap:Get(x, z)
+	return terrainType ~= TerrainType.Ocean and terrainType ~= TerrainType.Shore
 end
 
 function WorldMap.CanBuild(self: WorldMap, building: Building.Building)
 	return not (
-		self.featureMap[building.GridPosition.X]
-			and self.featureMap[building.GridPosition.X][building.GridPosition.Y]
-		or self.buildingMap[building.GridPosition.X]
-			and self.buildingMap[building.GridPosition.X][building.GridPosition.Y]
+		self.featureMap:Get(building.GridPosition.X, building.GridPosition.Y)
+		or self.buildingMap:Get(building.GridPosition.X, building.GridPosition.Y)
 	)
 end
 
-function WorldMap._DrawTree(self: WorldMap, x: number, z: number)
-	if typeof(x) ~= "number" or typeof(z) ~= "number" then
-		error("Invalid arguments to _DrawTree")
-	end
+function WorldMap._DrawTree(self: WorldMap, n: number)
+	local x, z = self.terrainMap:To2D(n)
 	local tree: Model = TreeModel:Clone()
 	resizeModel(tree, Vector3.one * (math.random() * 0.3 + 0.7))
 	tree:PivotTo(
@@ -127,32 +124,33 @@ function WorldMap._DrawTree(self: WorldMap, x: number, z: number)
 				)
 		) * CFrame.Angles(0, math.random() * math.pi, 0)
 	)
-	self.featureMap[x][z] = tree
+	self.featureMap.Array[n] = tree
 	tree.Parent = workspace.Map.Features
 end
 
-function WorldMap._Draw(self: WorldMap, x: number, z: number)
-	local terrainType = self.terrainMap[x][z]
+function WorldMap._Draw(self: WorldMap, n: number)
+	local x, z = self.terrainMap:To2D(n)
+	local terrainType = self.terrainMap.Array[n]
 
 	if terrainType == TerrainType.Ocean then
-		self.tileMap[x][z] = workspace.Map.Ocean
+		self.tileMap.Array[n] = workspace.Map.Ocean
 		return
 	end
 
-	if self.terrainMap[x][z - 1] == terrainType then
+	if self.terrainMap:Get(x, z - 1) == terrainType then
 		-- Extend previous part
-		local previousPart = self.tileMap[x][z - 1]
+		local previousPart = self.tileMap:Get(x, z - 1)
 		resize(previousPart, previousPart.Size.Z + 1)
-		self.tileMap[x][z] = previousPart
+		self.tileMap.Array[n] = previousPart
 		if terrainType == TerrainType.Forest then
-			self:_DrawTree(x, z)
+			self:_DrawTree(n)
 		end
 	else
 		local part = Instance.new("Part")
 		part.Size = Vector3.one
 		part.Anchored = true
 		part.CastShadow = false
-		part.Position = self.origin + Vector3.new(x, 0, z)
+		part.Position = self:WorldPosFromGridPos(Vector2int16.new(x, z))
 		part.BottomSurface = Enum.SurfaceType.Smooth
 		part.TopSurface = Enum.SurfaceType.Smooth
 
@@ -165,10 +163,10 @@ function WorldMap._Draw(self: WorldMap, x: number, z: number)
 			part.Position -= Vector3.new(0, 1, 0)
 		elseif terrainType == TerrainType.Forest then
 			part.Color = Color3.fromRGB(107, 215, 116)
-			self:_DrawTree(x, z)
+			self:_DrawTree(n)
 		end
 
-		self.tileMap[x][z] = part
+		self.tileMap.Array[n] = part
 		self._partCount += 1
 	end
 end
@@ -184,37 +182,30 @@ end
 function WorldMap.Generate(self: WorldMap, shouldDraw: boolean)
 	drawOcean(self.origin, self.width, self.height)
 
-	for x = 1, self.width do
-		self.tileMap[x] = table.create(self.height)
-		self.featureMap[x] = table.create(self.height)
-		self.terrainMap[x] = table.create(self.height)
-		self.buildingMap[x] = table.create(self.height)
-		for z = 1, self.height do
-			local noise = math.noise(self.seed, x / 40, z / 40) - self.falloffMap[x][z]
-			self.terrainMap[x][z] = if noise > TREE_THRESHOLD
-				then TerrainType.Forest
-				elseif noise > GRASS_THRESHOLD then TerrainType.Grass
-				elseif noise > SAND_THRESHOLD then TerrainType.Sand
-				elseif noise > SHORE_THRESHOLD then TerrainType.Shore
-				else TerrainType.Ocean
-			if shouldDraw then
-				self:_Draw(x, z)
-			end
+	for n = 1, self.width * self.height do
+		local x, z = self.terrainMap:To2D(n)
+		local noise = math.noise(self.seed, x / 40, z / 40) - self.falloffMap.Array[n]
+		self.terrainMap.Array[n] = if noise > TREE_THRESHOLD
+			then TerrainType.Forest
+			elseif noise > GRASS_THRESHOLD then TerrainType.Grass
+			elseif noise > SAND_THRESHOLD then TerrainType.Sand
+			elseif noise > SHORE_THRESHOLD then TerrainType.Shore
+			else TerrainType.Ocean
+		if shouldDraw then
+			self:_Draw(n)
 		end
 	end
 
 	if shouldDraw then
-		for x = 1, self.width do
-			for z = 1, self.height do
-				self.tileMap[x][z].Parent = workspace.Map.Tiles
-			end
-			if x % 20 == 0 then
+		for n = 1, self.width * self.height do
+			self.tileMap.Array[n].Parent = workspace.Map.Tiles
+			if n % TILES_DRAWN_PER_FRAME == 0 then
 				task.wait()
 			end
 		end
 	end
 
-	self.falloffMap = nil
+	table.clear(self.falloffMap)
 end
 
 -- WorldPos must be at the center of a tile.
@@ -276,11 +267,9 @@ end
 
 function WorldMap.UpdateCapacity(self: WorldMap)
 	local capacity = 0
-	for _, row in self.buildingMap do
-		for _, building in row do
-			if building.Name == "Hovel" then
-				capacity += 5
-			end
+	for _, building in self.buildingMap.Array do
+		if building.Name == "Hovel" then
+			capacity += 5
 		end
 	end
 	MapFolder:SetAttribute("Capacity", capacity)

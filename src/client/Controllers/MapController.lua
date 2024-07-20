@@ -32,17 +32,7 @@ ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 	map:Generate(true)
 	MapController.ClientMap = map
 	MapController.MapCreated:Fire(map)
-
-	-- ReplicaService occasionally decides to cast the Z value to a string.
-	-- I figured out a fix for this 2 years ago, but I forgot what it was, so this is a band-aid fix.
-	for x, row in map.featureMap do
-		for z, feature in row do
-			if typeof(z) == "string" then
-				map.featureMap[x][z] = nil
-				map.featureMap[x][tonumber(z)] = feature
-			end
-		end
-	end
+	warn(`Part count: {map._partCount}`)
 
 	local selectionBox = SelectionBox:Clone()
 	local _, size = selectionBox:GetBoundingBox()
@@ -61,8 +51,8 @@ ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 		end
 
 		local hoveredTile = map:GridPosFromWorldPos(map:SnapToGrid(raycastResult.Position))
-		local building = map.buildingMap[hoveredTile.X][hoveredTile.Y]
-		local feature = map.featureMap[hoveredTile.X][hoveredTile.Y]
+		local building = map.buildingMap:Get(hoveredTile.X, hoveredTile.Y)
+		local feature = map.featureMap:Get(hoveredTile.X, hoveredTile.Y)
 		map.hoveredTile = hoveredTile
 		HoveredTileLabel.Text =
 			`Hovered Tile:  {map.hoveredTile}\n{building and building.Name or feature and feature.Name or "None"}`
