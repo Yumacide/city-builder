@@ -28,7 +28,7 @@ ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 	setmetatable(serverMap, WorldMap)
 
 	local map = WorldMap.new(serverMap.origin, serverMap.width, serverMap.height)
-	map.seed = map.seed
+	map.seed = serverMap.seed
 	map:Generate(true)
 	MapController.ClientMap = map
 	MapController.MapCreated:Fire(map)
