@@ -25,22 +25,10 @@ local TreeModel = ReplicatedStorage.Assets.Tree
 local WorldMap = {}
 WorldMap.__index = WorldMap
 
--- Evaluate the falloff from a given value
-local function evaluate(value: number)
+local function evaluateFalloff(value: number)
 	local a = 3
 	local b = 2.2
 	return value ^ a / (value ^ a + (b - b * value) ^ a)
-end
-
-local function generateFalloff(size: number): Array2D<number>
-	local map = Array2D.new(size, size)
-	for n = 1, size ^ 2 do
-		local i, j = map:To2D(n)
-		local x = i * 2 / size - 1
-		local z = j * 2 / size - 1
-		map.Array[n] = evaluate(math.max(math.abs(x), math.abs(z)))
-	end
-	return map
 end
 
 local function resize(part: Part, size: number)
@@ -91,7 +79,6 @@ function WorldMap.new(origin: Vector3, width: number, height: number)
 	self.terrainMap = Array2D.new(width, height) :: Array2D<number>
 	self.featureMap = Array2D.new(width, height) :: Array2D<Model>
 	self.buildingMap = Array2D.new(width, height) :: Array2D<Building.Building>
-	self.falloffMap = generateFalloff(width) :: Array2D<number>
 	self.hoveredTile = Vector2int16.new(0, 0)
 	self._partCount = 0
 
@@ -184,7 +171,7 @@ function WorldMap.Generate(self: WorldMap, shouldDraw: boolean)
 
 	for n = 1, self.width * self.height do
 		local x, z = self.terrainMap:To2D(n)
-		local noise = math.noise(self.seed, x / 40, z / 40) - self.falloffMap.Array[n]
+		local noise = math.noise(self.seed, x / 40, z / 40) - evaluateFalloff(math.max(math.abs(x), math.abs(z)))
 		self.terrainMap.Array[n] = if noise > TREE_THRESHOLD
 			then TerrainType.Forest
 			elseif noise > GRASS_THRESHOLD then TerrainType.Grass
@@ -193,19 +180,12 @@ function WorldMap.Generate(self: WorldMap, shouldDraw: boolean)
 			else TerrainType.Ocean
 		if shouldDraw then
 			self:_Draw(n)
-		end
-	end
-
-	if shouldDraw then
-		for n = 1, self.width * self.height do
 			self.tileMap.Array[n].Parent = workspace.Map.Tiles
 			if n % TILES_DRAWN_PER_FRAME == 0 then
 				task.wait()
 			end
 		end
 	end
-
-	table.clear(self.falloffMap)
 end
 
 -- WorldPos must be at the center of a tile.
