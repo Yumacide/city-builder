@@ -43,7 +43,7 @@ ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 	RunService:BindToRenderStep("GetHoveredTile", 1, function(dt)
 		local ray = workspace.CurrentCamera:ScreenPointToRay(Mouse.X, Mouse.Y)
 		local raycastParams = RaycastParams.new()
-		raycastParams.FilterDescendantsInstances = { workspace.Map.Tiles }
+		raycastParams.FilterDescendantsInstances = { workspace.Map.Tiles, workspace.Map.Ocean }
 		raycastParams.FilterType = Enum.RaycastFilterType.Include
 		local raycastResult = workspace:Raycast(ray.Origin, ray.Direction * 500, raycastParams)
 		if not raycastResult then
@@ -53,6 +53,8 @@ ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 		local hoveredTile = map:GridPosFromWorldPos(map:SnapToGrid(raycastResult.Position))
 		local building = map.buildingMap:Get(hoveredTile.X, hoveredTile.Y)
 		local feature = map.featureMap:Get(hoveredTile.X, hoveredTile.Y)
+		local terrain = map.terrainMap:Get(hoveredTile.X, hoveredTile.Y)
+
 		map.hoveredTile = hoveredTile
 		HoveredTileLabel.Text =
 			`Hovered Tile:  {map.hoveredTile}\n{building and building.Name or feature and feature.Name or "None"}`
@@ -60,6 +62,9 @@ ReplicaController.ReplicaOfClassCreated("MapReplica", function(replica)
 
 		-- TODO: allow bigger selection
 		spring.Target = map:WorldPosFromGridPos(hoveredTile) + Vector3.new(0, 1 + size.Y / 2, 0)
+		if terrain == WorldMap.TerrainType.Ocean or terrain == WorldMap.TerrainType.Shore then
+			spring.Target -= Vector3.yAxis
+		end
 		spring:TimeSkip(dt)
 		selectionBox:PivotTo(CFrame.new(spring.Position))
 	end)
