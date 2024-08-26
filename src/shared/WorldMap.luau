@@ -23,13 +23,8 @@ local TerrainType = {
 local TreeModel = ReplicatedStorage.Assets.Tree
 
 local WorldMap = {}
+WorldMap.TerrainType = TerrainType
 WorldMap.__index = WorldMap
-
-local function evaluateFalloff(value: number)
-	local a = 3
-	local b = 2.2
-	return value ^ a / (value ^ a + (b - b * value) ^ a)
-end
 
 local function resize(part: Part, size: number)
 	part.Position = part.Position + Vector3.new(0, 0, math.abs(part.Size.Z - size) / 2)
@@ -74,6 +69,7 @@ function WorldMap.new(origin: Vector3, width: number, height: number)
 	self.origin = origin
 	self.width = width
 	self.height = height
+	self.center = Vector2.new((self.width + 1) / 2, (self.height + 1) / 2)
 	self.seed = Random.new():NextNumber(1, 100000)
 	self.tileMap = Array2D.new(width, height) :: Array2D<Part>
 	self.terrainMap = Array2D.new(width, height) :: Array2D<number>
@@ -166,12 +162,29 @@ function WorldMap.SnapToGrid(self: WorldMap, position: Vector3)
 	)
 end
 
+function WorldMap.Falloff(self: WorldMap, x: number, z: number)
+	x = math.abs(x - self.center.X)
+	z = math.abs(z - self.center.Y)
+	local value
+	if x >= z then
+		value = 2 * x / self.width
+	else
+		value = 2 * z / self.height
+	end
+	local a = 3
+	local b = 2.2
+	return value ^ a / (value ^ a + (b - b * value) ^ a)
+end
+
 function WorldMap.Generate(self: WorldMap, shouldDraw: boolean)
+	print(`generating with seed {self.seed}`)
+	-- try seed 27131.66501805785
+	-- try also 38939.916401024355
 	drawOcean(self.origin, self.width, self.height)
 
 	for n = 1, self.width * self.height do
 		local x, z = self.terrainMap:To2D(n)
-		local noise = math.noise(self.seed, x / 40, z / 40) - evaluateFalloff(math.max(math.abs(x), math.abs(z)))
+		local noise = math.noise(self.seed, x / 40, z / 40) - self:Falloff(x, z) - 0.2
 		self.terrainMap.Array[n] = if noise > TREE_THRESHOLD
 			then TerrainType.Forest
 			elseif noise > GRASS_THRESHOLD then TerrainType.Grass
@@ -180,7 +193,9 @@ function WorldMap.Generate(self: WorldMap, shouldDraw: boolean)
 			else TerrainType.Ocean
 		if shouldDraw then
 			self:_Draw(n)
-			self.tileMap.Array[n].Parent = workspace.Map.Tiles
+			if self.tileMap.Array[n].Name ~= "Ocean" then
+				self.tileMap.Array[n].Parent = workspace.Map.Tiles
+			end
 			if n % TILES_DRAWN_PER_FRAME == 0 then
 				task.wait()
 			end
