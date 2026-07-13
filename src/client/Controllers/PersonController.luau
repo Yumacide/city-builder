@@ -1,4 +1,3 @@
-local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
@@ -101,6 +100,7 @@ function PersonController.SimulatePeople(self: PersonController, dt: number)
 		local data = Task.TaskData[_task.Type]
 		if #_task.AssigneesWorking > 0 then
 			_task.Progress += (dt / data.Time) * #_task.AssigneesWorking / data.MaxAssignees
+			data.OnUpdate(_task, map, dt)
 			if _task.Progress >= 1 then
 				data.OnComplete(_task, map)
 				for _, person in _task.Assignees do
@@ -133,38 +133,6 @@ task.spawn(function()
 		PersonController:UpdateTasks()
 	end
 end)
-
-local isCuttingTree = false
-ContextActionService:BindAction("ToggleCutTree", function(_, inputState: Enum.UserInputState)
-	if inputState ~= Enum.UserInputState.End then
-		return
-	end
-
-	local map = MapController:GetMap()
-	if isCuttingTree then
-		isCuttingTree = false
-		print("Tree cutting mode off")
-		ContextActionService:UnbindAction("CutTree")
-		return
-	end
-	isCuttingTree = true
-	print("Tree cutting mode on")
-	ContextActionService:BindAction("CutTree", function(_, _inputState: Enum.UserInputState)
-		if _inputState ~= Enum.UserInputState.End then
-			return
-		end
-		local tree = map.featureMap:Get(map.hoveredTile.X, map.hoveredTile.Y)
-		if tree and tree.Name == "Tree" then
-			for _, _task in PersonController.Tasks do
-				if _task.Type == "CutTree" and _task.Location == map.hoveredTile then
-					return
-				end
-			end
-			print(`Tree cutting task added at {map.hoveredTile}`)
-			PersonController:AddTask(Task.new("CutTree", map.hoveredTile))
-		end
-	end, false, Enum.UserInputType.MouseButton1)
-end, false, Enum.KeyCode.T)
 
 export type PersonController = typeof(PersonController)
 
