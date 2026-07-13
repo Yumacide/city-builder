@@ -12,13 +12,18 @@ Person.__index = Person
 -- maybe start using knit components and remotecomponents and make client classes of Building and WorldMap
 function Person.new(home)
 	local self = setmetatable({}, Person)
+	local color = Color3.new(math.random(), math.random(), math.random())
+
 	self.Home = home
 	self.GridPosition = home.GridPosition
 	self.Path = {} :: { Vector2int16 }
 	self.Status = Person.Status.Idle
+
 	self.Model = ReplicatedStorage.Assets.Person:Clone()
-	self.Model.PrimaryPart.Color = Color3.new(math.random(), math.random(), math.random())
+	self.Model.PrimaryPart.Color = color
+	self.Model.Highlight.FillColor = color
 	self.Model:PivotTo(home.Model:GetPivot())
+
 	self.Maid = Maid.new()
 	self.Maid:GiveTask(self.Model)
 
