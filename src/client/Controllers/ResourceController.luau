@@ -18,7 +18,6 @@ function ResourceController.AddResource(
 	amount: number,
 	_location: Vector2int16?
 )
-	print(`Adding {amount} {resource} to inventory`)
 	self.Resources[resource] += amount
 	if resource == "Wood" then
 		WoodLabel.Text = "Wood: " .. self.Resources[resource]

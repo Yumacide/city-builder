@@ -27,7 +27,7 @@ for name, _building in Building.BuildingData do
 
 	button.Activated:Connect(function()
 		if currentButton then
-			selectedBuilding:Destroy()
+			BuildController:CancelBuilding(selectedBuilding)
 			if currentButton == button then
 				currentButton = nil
 				selectedBuilding = nil
@@ -36,7 +36,7 @@ for name, _building in Building.BuildingData do
 		end
 
 		selectedBuilding = Building.new(frame.Name)
-		BuildController:Plan(selectedBuilding, true)
+		BuildController:SelectBuildingFromMenu(selectedBuilding)
 		currentButton = button
 
 		selectedBuilding.Placed:Connect(function()

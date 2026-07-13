@@ -14,6 +14,12 @@ local RoadConnection = ReplicatedStorage.Assets.Buildings:WaitForChild("RoadConn
 local Mouse = game.Players.LocalPlayer:GetMouse()
 local BuildCursor = "rbxassetid://95764865742687"
 
+local BuildController = {
+	SelectedBuilding = nil :: Building.Building?,
+	PlannedRoads = {} :: { Building.Building },
+	PlannedRoadsMap = {} :: { [number]: { [number]: Building.Building } },
+}
+
 local DIRECTIONS = {
 	Vector2int16.new(1, 0),
 	Vector2int16.new(-1, 0),
@@ -21,63 +27,9 @@ local DIRECTIONS = {
 	Vector2int16.new(0, -1),
 }
 
-local BuildController = {
-	PlannedRoads = {},
-	PlannedRoadsMap = {},
-	PlannedBuilding = nil :: Building.Building?,
-}
-export type BuildController = typeof(BuildController)
-
-function BuildController.Plan(self: BuildController, building: Building.Building, bindControls: boolean)
-	local map: WorldMap.WorldMap = MapController:GetMap()
-	building.IsSelected = true
-
-	local highlight = Instance.new("Highlight")
-	highlight.Adornee = building.Model
-	highlight.FillColor = Color3.new(1, 1, 1)
-	highlight.FillTransparency = 0.9
-	highlight.Enabled = true
-	highlight.Parent = building.Model
-	if not map:CanBuild(building) then
-		highlight.OutlineColor = Color3.new(1, 0, 0)
-	end
-	building.Model.Parent = Map.Buildings
-	self.PlannedBuilding = building
-	SelectionModeController.SelectionMode = "Build"
-	Mouse.Icon = BuildCursor
-
-	if not bindControls then
-		return
-	end
-
-	ContextActionService:BindAction("RotateBuilding", function(_, inputState: Enum.UserInputState)
-		if inputState ~= Enum.UserInputState.Begin then
-			return
-		end
-		building.Data.AngleGoal += math.pi / 2
-	end, false, Enum.KeyCode.R)
-
-	ContextActionService:BindAction("CancelBuilding", function(_, inputState: Enum.UserInputState)
-		if inputState ~= Enum.UserInputState.End then
-			return
-		end
-		for _, road in self.PlannedRoads do
-			road:Destroy()
-		end
-		table.clear(self.PlannedRoads)
-		table.clear(self.PlannedRoadsMap)
-		building:Destroy()
-
-		self.PlannedBuilding = nil
-
-		SelectionModeController.SelectionMode = "None"
-		Mouse.Icon = ""
-		ContextActionService:UnbindAction("RotateBuilding")
-		ContextActionService:UnbindAction("PlaceBuilding")
-		ContextActionService:UnbindAction("CancelBuilding")
-		RunService:UnbindFromRenderStep("MoveBuilding")
-		RunService:UnbindFromRenderStep("UpdateBuildingPivot")
-	end, false, Enum.KeyCode.F)
+function BuildController.MoveBuildingWithCursor(building: Building.Building)
+	local map = MapController:GetMap()
+	local highlight = building.Model.Highlight
 
 	RunService:BindToRenderStep("MoveBuilding", 1, function()
 		if map.hoveredTile == building.GridPosition then
@@ -125,135 +77,21 @@ function BuildController.Plan(self: BuildController, building: Building.Building
 	end)
 end
 
-function BuildController.Place(self: BuildController, building: Building.Building, instantBuild: boolean)
-	local map: WorldMap.WorldMap = MapController:GetMap()
-	building.Model.Parent = Map.Buildings
-	building.IsPlaced = true
+function BuildController.CreateBuildingShadow(building: Building.Building)
+	local map = MapController:GetMap()
 
-	ContextActionService:UnbindAction("RotateBuilding")
-	ContextActionService:UnbindAction("PlaceBuilding")
-	RunService:UnbindFromRenderStep("MoveBuilding")
-	-- TODO: wait until its done moving
-	RunService:UnbindFromRenderStep("UpdateBuildingPivot")
-	if building.Name == "Road" then
-		self:PlaceRoad(building, instantBuild)
-		return
-	end
-	ContextActionService:UnbindAction("CancelBuilding")
+	local highlight = Instance.new("Highlight")
+	highlight.Adornee = building.Model
+	highlight.FillColor = Color3.new(1, 1, 1)
+	highlight.FillTransparency = 0.9
+	highlight.Enabled = true
+	highlight.Parent = building.Model
 
 	if not map:CanBuild(building) then
-		building.Model:Destroy()
-		return
+		highlight.OutlineColor = Color3.new(1, 0, 0)
 	end
 
-	map.buildingMap:Set(building.GridPosition.X, building.GridPosition.Y, building)
-
-	local positionGoal = building.Data.GoalPivot.Position
-	local angleGoal = building.Data.AngleGoal
-	building.Model:PivotTo(CFrame.new(positionGoal) * CFrame.Angles(0, angleGoal, 0))
-
-	building.Model.Highlight:Destroy()
-	building.Placed:Fire()
-	if instantBuild then
-		building:Complete()
-		if Building.BuildingData[building.Name].OnComplete then
-			Building.BuildingData[building.Name].OnComplete(building, map)
-		end
-
-		-- Remove after implementing visits.
-		if building.Name == "Hovel" then
-			for _ = 1, 5 do
-				PersonController:AddPerson(building)
-			end
-		end
-	end
-end
-
--- TODO: Use a part pool
-function BuildController.PlaceRoad(self: BuildController, building: Building.Building, instantBuild: boolean)
-	local map: WorldMap.WorldMap = MapController:GetMap()
-	local start = building.GridPosition
-	local goal: Vector2int16
-
-	RunService:BindToRenderStep("ExtendRoad", 1, function()
-		local currentGoal = map.hoveredTile
-		if goal == currentGoal then
-			return
-		end
-		goal = currentGoal
-
-		for _, road: Building.Building in self.PlannedRoads do
-			if road ~= building then
-				road:Destroy()
-			end
-		end
-		table.clear(self.PlannedRoads)
-		table.clear(self.PlannedRoadsMap)
-
-		table.insert(self.PlannedRoads, building)
-		if not self.PlannedRoadsMap[start.X] then
-			self.PlannedRoadsMap[start.X] = {}
-		end
-		self.PlannedRoadsMap[start.X][start.Y] = building
-
-		local path = {}
-		local offset = goal - start
-		for i = if offset.X < 0 then -1 else 1, offset.X, if offset.X < 0 then -1 else 1 do
-			table.insert(path, Vector2int16.new(start.X + i, start.Y))
-		end
-		for i = if offset.Y < 0 then -1 else 1, offset.Y, if offset.Y < 0 then -1 else 1 do
-			table.insert(path, Vector2int16.new(goal.X, start.Y + i))
-		end
-		if path[1] == start then
-			table.remove(path, 1)
-		end
-
-		for _, point in path do
-			local road = Building.new("Road")
-			road.GridPosition = point
-			self:Plan(road, false)
-			table.insert(self.PlannedRoads, road)
-			road.Model.Parent = Map.Buildings.PlannedRoads
-
-			if not self.PlannedRoadsMap[point.X] then
-				self.PlannedRoadsMap[point.X] = {}
-			end
-			self.PlannedRoadsMap[point.X][point.Y] = road
-
-			local position = map:WorldPosFromGridPos(point) + Vector3.yAxis
-			road.Model:PivotTo(CFrame.new(position))
-		end
-		self:RedrawRoads()
-	end)
-	ContextActionService:BindAction("PlaceRoad", function(_, inputState)
-		if inputState ~= Enum.UserInputState.End then
-			return
-		end
-		ContextActionService:UnbindAction("CancelBuilding")
-		ContextActionService:UnbindAction("PlaceRoad")
-		RunService:UnbindFromRenderStep("ExtendRoad")
-		-- TODO: wait until its done moving
-		RunService:UnbindFromRenderStep("UpdateBuildingPivot")
-
-		for _, road: Building.Building in self.PlannedRoads do
-			if not map:CanBuild(road) then
-				road.Model:Destroy()
-				continue
-			end
-
-			map.buildingMap:Set(road.GridPosition.X, road.GridPosition.Y, road)
-
-			road.IsPlaced = true
-			road.Model.Highlight:Destroy()
-			road.Model.Parent = Map.Buildings
-			road.Placed:Fire()
-			if instantBuild then
-				road:Complete()
-			end
-		end
-
-		table.clear(self.PlannedRoads)
-	end, false, Enum.UserInputType.MouseButton1)
+	building.Model.Parent = Map.Buildings
 end
 
 function BuildController._RedrawRoad(self: BuildController, currentRoad: Building.Building)
@@ -295,5 +133,178 @@ function BuildController.RedrawRoads(self: BuildController)
 		self:_RedrawRoad(road)
 	end
 end
+
+function BuildController.CancelBuilding(self: BuildController, building: Building.Building)
+	for _, road in self.PlannedRoads do
+		road:Destroy()
+	end
+	table.clear(self.PlannedRoads)
+	table.clear(self.PlannedRoadsMap)
+	building:Destroy()
+
+	SelectionModeController.SelectionMode = "None"
+	Mouse.Icon = ""
+
+	BuildController.UnbindBuildControls()
+end
+
+function BuildController.BindBuildControls(self: BuildController, building: Building.Building)
+	Mouse.Icon = BuildCursor
+
+	ContextActionService:BindAction("RotateBuilding", function(_, inputState: Enum.UserInputState)
+		if inputState ~= Enum.UserInputState.Begin then
+			return
+		end
+		building.Data.AngleGoal += math.pi / 2
+	end, false, Enum.KeyCode.R)
+
+	ContextActionService:BindAction("CancelBuilding", function(_, inputState: Enum.UserInputState)
+		if inputState ~= Enum.UserInputState.End then
+			return
+		end
+		self:CancelBuilding(building)
+	end, false, Enum.KeyCode.F)
+end
+
+function BuildController.UnbindBuildControls()
+	ContextActionService:UnbindAction("RotateBuilding")
+	RunService:UnbindFromRenderStep("MoveBuilding")
+	RunService:UnbindFromRenderStep("UpdateBuildingPivot")
+	ContextActionService:UnbindAction("CancelBuilding")
+end
+
+function BuildController.PlanRoad(self: BuildController, building: Building.Building)
+	self.CreateBuildingShadow(building)
+end
+
+function BuildController.PlanRoadPath(self: BuildController, building: Building.Building)
+	local map: WorldMap.WorldMap = MapController:GetMap()
+	local start = building.GridPosition
+	local goal: Vector2int16
+
+	SelectionModeController.SelectionMode = "PlanRoad"
+	building.Model:PivotTo(CFrame.new(map:WorldPosFromGridPos(start) + Vector3.yAxis))
+
+	ContextActionService:UnbindAction("RotateBuilding")
+	RunService:UnbindFromRenderStep("MoveBuilding")
+	RunService:UnbindFromRenderStep("UpdateBuildingPivot")
+
+	RunService:BindToRenderStep("ExtendRoad", 1, function()
+		local currentGoal = map.hoveredTile
+		if goal == currentGoal then
+			return
+		end
+		goal = currentGoal
+
+		for _, road: Building.Building in self.PlannedRoads do
+			if road ~= building then
+				road:Destroy()
+			end
+		end
+		table.clear(self.PlannedRoads)
+		table.clear(self.PlannedRoadsMap)
+
+		table.insert(self.PlannedRoads, building)
+		if not self.PlannedRoadsMap[start.X] then
+			self.PlannedRoadsMap[start.X] = {}
+		end
+		self.PlannedRoadsMap[start.X][start.Y] = building
+
+		local path = {}
+		local offset = goal - start
+		for i = if offset.X < 0 then -1 else 1, offset.X, if offset.X < 0 then -1 else 1 do
+			table.insert(path, Vector2int16.new(start.X + i, start.Y))
+		end
+		for i = if offset.Y < 0 then -1 else 1, offset.Y, if offset.Y < 0 then -1 else 1 do
+			table.insert(path, Vector2int16.new(goal.X, start.Y + i))
+		end
+		if path[1] == start then
+			table.remove(path, 1)
+		end
+
+		for _, point in path do
+			local road = Building.new("Road")
+			road.GridPosition = point
+			self:PlanRoad(road)
+			table.insert(self.PlannedRoads, road)
+			road.Model.Parent = Map.Buildings.PlannedRoads
+
+			if not self.PlannedRoadsMap[point.X] then
+				self.PlannedRoadsMap[point.X] = {}
+			end
+			self.PlannedRoadsMap[point.X][point.Y] = road
+
+			local position = map:WorldPosFromGridPos(point) + Vector3.yAxis
+			road.Model:PivotTo(CFrame.new(position))
+		end
+		self:RedrawRoads()
+	end)
+end
+
+function BuildController.SelectBuildingFromMenu(self: BuildController, building: Building.Building)
+	self.SelectedBuilding = building
+	SelectionModeController.SelectionMode = "Build"
+
+	BuildController.CreateBuildingShadow(building)
+	BuildController.MoveBuildingWithCursor(building)
+	self:BindBuildControls(building)
+end
+
+function BuildController.Place(self: BuildController, building: Building.Building, instantBuild: boolean)
+	local map = MapController:GetMap()
+
+	if not map:CanBuild(building) then
+		building:Destroy()
+		return
+	end
+
+	map.buildingMap:Set(building.GridPosition.X, building.GridPosition.Y, building)
+
+	building.IsPlaced = true
+	building.Model.Highlight:Destroy()
+	building.Model.Parent = Map.Buildings
+	building.Placed:Fire()
+	if instantBuild then
+		building:Complete()
+		if Building.BuildingData[building.Name].OnComplete then
+			Building.BuildingData[building.Name].OnComplete(building, map)
+		end
+
+		-- Remove after implementing visits.
+		if building.Name == "Hovel" then
+			for _ = 1, 5 do
+				PersonController:AddPerson(building)
+			end
+		end
+	end
+end
+
+function BuildController.PlaceRoads(self: BuildController, instantBuild: boolean)
+	RunService:UnbindFromRenderStep("ExtendRoad")
+	for _, road: Building.Building in self.PlannedRoads do
+		self:Place(road, instantBuild)
+	end
+
+	table.clear(self.PlannedRoads)
+end
+
+function BuildController.PlaceSelected(self: BuildController, instantBuild: boolean)
+	local selectedBuilding = self.SelectedBuilding
+
+	self.SelectedBuilding = nil
+
+	SelectionModeController.SelectionMode = "None"
+	Mouse.Icon = ""
+	BuildController.UnbindBuildControls()
+
+	if selectedBuilding.Name == "Road" then
+		self:PlaceRoads(instantBuild)
+		return
+	end
+
+	self:Place(selectedBuilding, instantBuild)
+end
+
+export type BuildController = typeof(BuildController)
 
 return BuildController

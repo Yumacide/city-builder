@@ -80,6 +80,7 @@ function Building.Destroy(self: Building)
 		RunService:UnbindFromRenderStep("MoveBuilding")
 		RunService:UnbindFromRenderStep("UpdateBuildingPivot")
 	end
+	self.Model:Destroy()
 	self.Destroying:Fire()
 	self.Maid:Destroy()
 end

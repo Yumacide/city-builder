@@ -104,6 +104,13 @@ local function onMapCreated(map)
 				return
 			end
 
+			if SelectionModeController.SelectionMode == "Build" then
+				if BuildController.SelectedBuilding.Name == "Road" then
+					BuildController:PlanRoadPath(BuildController.SelectedBuilding)
+				end
+				return
+			end
+
 			map.selection = { Start = hoveredTile, End = hoveredTile }
 			SelectionController.isSelectingBox = true
 
@@ -121,10 +128,13 @@ local function onMapCreated(map)
 			SelectionController.isSelectingBox = false
 			local endPos = map:WorldPosFromGridPos(map.selection.End)
 
-			if SelectionModeController.SelectionMode == "Build" then
+			if
+				SelectionModeController.SelectionMode == "Build"
+				or SelectionModeController.SelectionMode == "PlanRoad"
+			then
 				SelectionModeController.SelectionMode = "None"
 				Mouse.Icon = "rbxasset://SystemCursors/Arrow"
-				BuildController:Place(BuildController.PlannedBuilding, true)
+				BuildController:PlaceSelected(true)
 				return
 			end
 
