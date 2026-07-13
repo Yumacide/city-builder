@@ -15,14 +15,13 @@ return {
 			self.CFrame = axe:GetPivot()
 			self.Axe = axe
 		end,
-		OnUpdate = function(self, map, dt)
+		OnUpdate = function(self)
 			task.spawn(function()
-				-- shake axe with spring
 				local animationTime = 0.25
 				local timeElapsed = 0
 				local dt2 = 0
 				local shakeDirection = Vector3.new(math.random(), 0, math.random()).Unit
-				print("shake axe")
+
 				while true do
 					if timeElapsed >= animationTime then
 						break
@@ -39,7 +38,6 @@ return {
 		OnComplete = function(self, map)
 			map.featureMap:Get(self.Location.X, self.Location.Y):Destroy()
 			map.featureMap:Set(self.Location.X, self.Location.Y, nil)
-			print(`Done cutting tree at {self.Location}`)
 		end,
 	},
 }

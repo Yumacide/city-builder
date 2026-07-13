@@ -21,6 +21,7 @@ function PersonController.AddTask(self: PersonController, _task: Task.Task)
 end
 
 function PersonController.UpdateTasks(self: PersonController)
+	-- TODO: make it so each person selects the task closest to them
 	for _, _task in self.Tasks do
 		if #_task.Assignees == Task.TaskData[_task.Type].MaxAssignees then
 			continue
@@ -102,7 +103,7 @@ function PersonController.SimulatePeople(self: PersonController, dt: number)
 			_task.Progress += (dt / data.Time) * #_task.AssigneesWorking / data.MaxAssignees
 			data.OnUpdate(_task, map, dt)
 			if _task.Progress >= 1 then
-				data.OnComplete(_task, map)
+				_task:Complete()
 				for _, person in _task.Assignees do
 					person.AssignedTask = nil
 					person.Status = Person.Status.Idle

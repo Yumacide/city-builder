@@ -116,7 +116,6 @@ local function onMapCreated(map)
 				updateSelectionBox(map)
 			end)
 		elseif state == Enum.UserInputState.End then
-			print(`Selection from {map.selection.Start} to {map.selection.End}`)
 			RunService:UnbindFromRenderStep("UpdateSelection")
 			SelectionController.isSelectingBox = false
 			local endPos = map:WorldPosFromGridPos(map.selection.End)

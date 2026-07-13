@@ -3,6 +3,7 @@ local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PersonController = require(script.Parent.PersonController)
+local ResourceController = require(script.Parent.ResourceController)
 local Task = require(ReplicatedStorage.Common.Task)
 
 local Player = Players.LocalPlayer
@@ -20,7 +21,11 @@ function CutTreeController.AddCutTask(map, pos: Vector2int16)
 				return
 			end
 		end
-		PersonController:AddTask(Task.new("CutTree", pos, map))
+		local _task = Task.new("CutTree", pos, map)
+		PersonController:AddTask(_task)
+		_task.Completed:Connect(function()
+			ResourceController:AddResource("Wood", 1)
+		end)
 	end
 end
 
