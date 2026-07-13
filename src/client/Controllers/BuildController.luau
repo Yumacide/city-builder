@@ -10,6 +10,9 @@ local Map = workspace:WaitForChild("Map")
 
 local RoadConnection = ReplicatedStorage.Assets.Buildings:WaitForChild("RoadConnection")
 
+local Mouse = game.Players.LocalPlayer:GetMouse()
+local BuildCursor = "rbxassetid://95764865742687"
+
 local DIRECTIONS = {
 	Vector2int16.new(1, 0),
 	Vector2int16.new(-1, 0),
@@ -20,6 +23,8 @@ local DIRECTIONS = {
 local BuildController = {
 	PlannedRoads = {},
 	PlannedRoadsMap = {},
+	PlannedBuilding = nil :: Building.Building?,
+	isPlaceMode = false,
 }
 export type BuildController = typeof(BuildController)
 
@@ -37,6 +42,9 @@ function BuildController.Plan(self: BuildController, building: Building.Building
 		highlight.OutlineColor = Color3.new(1, 0, 0)
 	end
 	building.Model.Parent = Map.Buildings
+	self.PlannedBuilding = building
+	self.isPlaceMode = true
+	Mouse.Icon = BuildCursor
 
 	if not bindControls then
 		return
@@ -49,13 +57,6 @@ function BuildController.Plan(self: BuildController, building: Building.Building
 		building.Data.AngleGoal += math.pi / 2
 	end, false, Enum.KeyCode.R)
 
-	ContextActionService:BindAction("PlaceBuilding", function(_, inputState: Enum.UserInputState)
-		if inputState ~= Enum.UserInputState.Begin then
-			return
-		end
-		self:Place(building, true)
-	end, false, Enum.UserInputType.MouseButton1)
-
 	ContextActionService:BindAction("CancelBuilding", function(_, inputState: Enum.UserInputState)
 		if inputState ~= Enum.UserInputState.End then
 			return
@@ -66,6 +67,15 @@ function BuildController.Plan(self: BuildController, building: Building.Building
 		table.clear(self.PlannedRoads)
 		table.clear(self.PlannedRoadsMap)
 		building:Destroy()
+
+		self.PlannedBuilding = nil
+		self.isPlaceMode = false
+		Mouse.Icon = "rbxasset://SystemCursors/Arrow"
+		ContextActionService:UnbindAction("RotateBuilding")
+		ContextActionService:UnbindAction("PlaceBuilding")
+		ContextActionService:UnbindAction("CancelBuilding")
+		RunService:UnbindFromRenderStep("MoveBuilding")
+		RunService:UnbindFromRenderStep("UpdateBuildingPivot")
 	end, false, Enum.KeyCode.F)
 
 	RunService:BindToRenderStep("MoveBuilding", 1, function()
