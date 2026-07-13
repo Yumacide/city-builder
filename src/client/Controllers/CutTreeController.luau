@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local PersonController = require(script.Parent.PersonController)
 local ResourceController = require(script.Parent.ResourceController)
+local SelectionModeController = require(script.Parent.SelectionModeController)
 local Task = require(ReplicatedStorage.Common.Task)
 
 local Player = Players.LocalPlayer
@@ -11,7 +12,7 @@ local Mouse = Player:GetMouse()
 
 local AxeCursor = "rbxassetid://81319236921332"
 
-local CutTreeController = { isCutMode = false }
+local CutTreeController = {}
 
 function CutTreeController.AddCutTask(map, pos: Vector2int16)
 	local tree = map.featureMap:Get(pos.X, pos.Y)
@@ -34,13 +35,13 @@ ContextActionService:BindAction("ToggleCutTree", function(_, inputState: Enum.Us
 		return
 	end
 
-	if CutTreeController.isCutMode then
-		CutTreeController.isCutMode = false
-		Mouse.Icon = "rbxasset://SystemCursors/Arrow"
+	if SelectionModeController.SelectionMode == "CutTree" then
+		SelectionModeController.SelectionMode = "None"
+		Mouse.Icon = ""
 		ContextActionService:UnbindAction("CutTree")
 		return
 	end
-	CutTreeController.isCutMode = true
+	SelectionModeController.SelectionMode = "CutTree"
 	Mouse.Icon = AxeCursor
 end, false, Enum.KeyCode.T)
 

@@ -6,6 +6,7 @@ local WorldMap = require(ReplicatedStorage.Common.WorldMap)
 local Building = require(ReplicatedStorage.Common.Building)
 local MapController = require(script.Parent.MapController)
 local PersonController = require(script.Parent.PersonController)
+local SelectionModeController = require(script.Parent.SelectionModeController)
 local Map = workspace:WaitForChild("Map")
 
 local RoadConnection = ReplicatedStorage.Assets.Buildings:WaitForChild("RoadConnection")
@@ -24,7 +25,6 @@ local BuildController = {
 	PlannedRoads = {},
 	PlannedRoadsMap = {},
 	PlannedBuilding = nil :: Building.Building?,
-	isPlaceMode = false,
 }
 export type BuildController = typeof(BuildController)
 
@@ -43,7 +43,7 @@ function BuildController.Plan(self: BuildController, building: Building.Building
 	end
 	building.Model.Parent = Map.Buildings
 	self.PlannedBuilding = building
-	self.isPlaceMode = true
+	SelectionModeController.SelectionMode = "Build"
 	Mouse.Icon = BuildCursor
 
 	if not bindControls then
@@ -69,8 +69,9 @@ function BuildController.Plan(self: BuildController, building: Building.Building
 		building:Destroy()
 
 		self.PlannedBuilding = nil
-		self.isPlaceMode = false
-		Mouse.Icon = "rbxasset://SystemCursors/Arrow"
+
+		SelectionModeController.SelectionMode = "None"
+		Mouse.Icon = ""
 		ContextActionService:UnbindAction("RotateBuilding")
 		ContextActionService:UnbindAction("PlaceBuilding")
 		ContextActionService:UnbindAction("CancelBuilding")
@@ -146,6 +147,11 @@ function BuildController.Place(self: BuildController, building: Building.Buildin
 	end
 
 	map.buildingMap:Set(building.GridPosition.X, building.GridPosition.Y, building)
+
+	local positionGoal = building.Data.GoalPivot.Position
+	local angleGoal = building.Data.AngleGoal
+	building.Model:PivotTo(CFrame.new(positionGoal) * CFrame.Angles(0, angleGoal, 0))
+
 	building.Model.Highlight:Destroy()
 	building.Placed:Fire()
 	if instantBuild then

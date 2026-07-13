@@ -6,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local BuildController = require(script.Parent.BuildController)
 local MapController = require(script.Parent.MapController)
 local CutTreeController = require(script.Parent.CutTreeController)
+local SelectionModeController = require(script.Parent.SelectionModeController)
 
 local Spring = require(ReplicatedStorage.Common.Libraries.Spring)
 local WorldMap = require(ReplicatedStorage.Common.WorldMap)
@@ -120,14 +121,14 @@ local function onMapCreated(map)
 			SelectionController.isSelectingBox = false
 			local endPos = map:WorldPosFromGridPos(map.selection.End)
 
-			if BuildController.isPlaceMode then
-				BuildController.isPlaceMode = false
+			if SelectionModeController.SelectionMode == "Build" then
+				SelectionModeController.SelectionMode = "None"
 				Mouse.Icon = "rbxasset://SystemCursors/Arrow"
 				BuildController:Place(BuildController.PlannedBuilding, true)
 				return
 			end
 
-			if CutTreeController.isCutMode then
+			if SelectionModeController.SelectionMode == "CutTree" then
 				local startPos = map:WorldPosFromGridPos(map.selection.Start)
 				local minX = math.min(startPos.X, endPos.X)
 				local maxX = math.max(startPos.X, endPos.X)
