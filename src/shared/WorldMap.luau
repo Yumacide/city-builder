@@ -10,7 +10,7 @@ type Array2D<T> = Array2D.Array2D<T>
 local MapFolder = workspace.Map
 
 local TILES_DRAWN_PER_FRAME = 5000
-local TREE_THRESHOLD, GRASS_THRESHOLD, SAND_THRESHOLD, SHORE_THRESHOLD = 0.25, 0, -0.1, -0.2
+local TREE_THRESHOLD, GRASS_THRESHOLD, SAND_THRESHOLD, SHORE_THRESHOLD = 0.27, -0.01, -0.06, -0.15
 
 local TerrainType = {
 	Forest = 1,
@@ -70,12 +70,16 @@ function WorldMap.new(origin: Vector3, width: number, height: number)
 	self.width = width
 	self.height = height
 	self.center = Vector2.new((self.width + 1) / 2, (self.height + 1) / 2)
-	self.seed = Random.new():NextNumber(1, 100000)
+	self.seed = Random.new():NextInteger(1, 100000)
 	self.tileMap = Array2D.new(width, height) :: Array2D<Part>
 	self.terrainMap = Array2D.new(width, height) :: Array2D<number>
 	self.featureMap = Array2D.new(width, height) :: Array2D<Model>
 	self.buildingMap = Array2D.new(width, height) :: Array2D<Building.Building>
 	self.hoveredTile = Vector2int16.new(0, 0)
+	self.selection = {
+		Start = Vector2int16.new(0, 0),
+		End = Vector2int16.new(0, 0),
+	}
 	self._partCount = 0
 
 	return self
