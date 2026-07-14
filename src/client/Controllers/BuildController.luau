@@ -11,9 +11,6 @@ local Map = workspace:WaitForChild("Map")
 
 local RoadConnection = ReplicatedStorage.Assets.Buildings:WaitForChild("RoadConnection")
 
-local Mouse = game.Players.LocalPlayer:GetMouse()
-local BuildCursor = "rbxassetid://95764865742687"
-
 local BuildController = {
 	SelectedBuilding = nil :: Building.Building?,
 	PlannedRoads = {} :: { Building.Building },
@@ -142,15 +139,12 @@ function BuildController.CancelBuilding(self: BuildController, building: Buildin
 	table.clear(self.PlannedRoadsMap)
 	building:Destroy()
 
-	SelectionModeController.SelectionMode = "None"
-	Mouse.Icon = ""
+	SelectionModeController.SetSelectionMode("None")
 
 	BuildController.UnbindBuildControls()
 end
 
 function BuildController.BindBuildControls(self: BuildController, building: Building.Building)
-	Mouse.Icon = BuildCursor
-
 	ContextActionService:BindAction("RotateBuilding", function(_, inputState: Enum.UserInputState)
 		if inputState ~= Enum.UserInputState.Begin then
 			return
@@ -182,7 +176,7 @@ function BuildController.PlanRoadPath(self: BuildController, building: Building.
 	local start = building.GridPosition
 	local goal: Vector2int16
 
-	SelectionModeController.SelectionMode = "PlanRoad"
+	SelectionModeController.SetSelectionMode("PlanRoad")
 	building.Model:PivotTo(CFrame.new(map:WorldPosFromGridPos(start) + Vector3.yAxis))
 
 	ContextActionService:UnbindAction("RotateBuilding")
@@ -243,14 +237,14 @@ end
 
 function BuildController.SelectBuildingFromMenu(self: BuildController, building: Building.Building)
 	self.SelectedBuilding = building
-	SelectionModeController.SelectionMode = "Build"
+	SelectionModeController.SetSelectionMode("Build")
 
 	BuildController.CreateBuildingShadow(building)
 	BuildController.MoveBuildingWithCursor(building)
 	self:BindBuildControls(building)
 end
 
-function BuildController.Place(self: BuildController, building: Building.Building, instantBuild: boolean)
+function BuildController.Place(_self: BuildController, building: Building.Building, instantBuild: boolean)
 	local map = MapController:GetMap()
 
 	if not map:CanBuild(building) then
@@ -293,8 +287,7 @@ function BuildController.PlaceSelected(self: BuildController, instantBuild: bool
 
 	self.SelectedBuilding = nil
 
-	SelectionModeController.SelectionMode = "None"
-	Mouse.Icon = ""
+	SelectionModeController.SetSelectionMode("None")
 	BuildController.UnbindBuildControls()
 
 	if selectedBuilding.Name == "Road" then

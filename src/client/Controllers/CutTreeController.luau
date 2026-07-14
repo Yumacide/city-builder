@@ -1,16 +1,11 @@
-local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local BuildController = require(script.Parent.BuildController)
 local PersonController = require(script.Parent.PersonController)
 local ResourceController = require(script.Parent.ResourceController)
 local SelectionModeController = require(script.Parent.SelectionModeController)
 local Task = require(ReplicatedStorage.Common.Task)
-
-local Player = Players.LocalPlayer
-local Mouse = Player:GetMouse()
-
-local AxeCursor = "rbxassetid://81319236921332"
 
 local CutTreeController = {}
 
@@ -36,13 +31,16 @@ ContextActionService:BindAction("ToggleCutTree", function(_, inputState: Enum.Us
 	end
 
 	if SelectionModeController.SelectionMode == "CutTree" then
-		SelectionModeController.SelectionMode = "None"
-		Mouse.Icon = ""
+		SelectionModeController.SetSelectionMode("None")
 		ContextActionService:UnbindAction("CutTree")
 		return
 	end
-	SelectionModeController.SelectionMode = "CutTree"
-	Mouse.Icon = AxeCursor
+
+	if SelectionModeController.SelectionMode == "Build" or SelectionModeController.SelectionMode == "PlanRoad" then
+		BuildController:CancelBuilding(BuildController.SelectedBuilding)
+	end
+
+	SelectionModeController.SetSelectionMode("CutTree")
 end, false, Enum.KeyCode.T)
 
 return CutTreeController

@@ -25,17 +25,18 @@ local selectionBox = SelectionBox:Clone()
 local _, size = selectionBox:GetBoundingBox()
 selectionBox.Parent = workspace
 
-local spring = Spring.new(Vector3.zero)
-spring.Speed = 12
-
 local springBR = Spring.new(Vector3.zero)
-springBR.Speed = 12
+springBR.Speed = 13
+springBR.Damper = 0.8
 local springTL = Spring.new(Vector3.zero)
-springTL.Speed = 12
+springTL.Speed = 13
+springTL.Damper = 0.8
 local springTR = Spring.new(Vector3.zero)
-springTR.Speed = 12
+springTR.Speed = 13
+springTR.Damper = 0.8
 local springBL = Spring.new(Vector3.zero)
-springBL.Speed = 12
+springBL.Speed = 13
+springBL.Damper = 0.8
 
 local function updateSelectionBox(map: WorldMap.WorldMap)
 	local startPos = map:WorldPosFromGridPos(map.selection.Start)
@@ -95,6 +96,20 @@ local function onMapCreated(map)
 		selectionBox.BottomLeft:PivotTo(
 			CFrame.new(springBL.Position) * CFrame.Angles(0, math.rad(-180), -math.rad(180))
 		)
+
+		local transparentBox = selectionBox:FindFirstChild("TransparentBox")
+		if transparentBox then
+			transparentBox.Size = Vector3.new(
+				math.abs(springBR.Position.X - springTL.Position.X) + 1,
+				0.1,
+				math.abs(springBR.Position.Z - springTL.Position.Z) + 1
+			)
+			transparentBox.CFrame = CFrame.new(
+				(springBR.Position.X + springTL.Position.X) / 2,
+				springBR.Position.Y - 0.55,
+				(springBR.Position.Z + springTL.Position.Z) / 2
+			)
+		end
 	end)
 
 	ContextActionService:BindAction("SelectTile", function(_, state: Enum.UserInputState)
@@ -114,6 +129,18 @@ local function onMapCreated(map)
 			map.selection = { Start = hoveredTile, End = hoveredTile }
 			SelectionController.isSelectingBox = true
 
+			local transparentBox = Instance.new("Part")
+			transparentBox.Anchored = true
+			transparentBox.CanCollide = false
+			transparentBox.Name = "TransparentBox"
+			transparentBox.Material = Enum.Material.SmoothPlastic
+			transparentBox.Transparency = 0.75
+			transparentBox.Color = Color3.new(1, 1, 1)
+			transparentBox.CastShadow = false
+			transparentBox.Parent = selectionBox
+
+			workspace.Map.GridLines.Texture.Transparency = 0.75
+
 			RunService:BindToRenderStep("UpdateSelection", 2, function()
 				hoveredTile = map.hoveredTile
 				if not hoveredTile then
@@ -127,13 +154,17 @@ local function onMapCreated(map)
 			RunService:UnbindFromRenderStep("UpdateSelection")
 			SelectionController.isSelectingBox = false
 			local endPos = map:WorldPosFromGridPos(map.selection.End)
+			local transparentBox = selectionBox:FindFirstChild("TransparentBox")
+			if transparentBox then
+				transparentBox:Destroy()
+				workspace.Map.GridLines.Texture.Transparency = 1
+			end
 
 			if
 				SelectionModeController.SelectionMode == "Build"
 				or SelectionModeController.SelectionMode == "PlanRoad"
 			then
-				SelectionModeController.SelectionMode = "None"
-				Mouse.Icon = "rbxasset://SystemCursors/Arrow"
+				SelectionModeController.SetSelectionMode("None")
 				BuildController:PlaceSelected(true)
 				return
 			end

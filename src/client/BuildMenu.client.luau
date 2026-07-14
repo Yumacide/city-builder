@@ -10,10 +10,16 @@ local Building = require(ReplicatedStorage.Common.Building)
 local buildButton = PlayerGui:WaitForChild("ScreenGui"):WaitForChild("BuildButton")
 local buildMenu = PlayerGui:WaitForChild("ScreenGui"):WaitForChild("BuildMenu")
 local buildButtonTemplate = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("BuildingButtonTemplate")
+local exitButton = buildMenu:WaitForChild("ExitButton")
 
 buildButton.Activated:Connect(function()
 	buildButton.Visible = false
 	buildMenu.Visible = true
+end)
+
+exitButton.Activated:Connect(function()
+	buildMenu.Visible = false
+	buildButton.Visible = true
 end)
 
 local currentButton: TextButton?

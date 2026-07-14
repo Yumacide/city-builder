@@ -4,7 +4,7 @@ local Player = Players.LocalPlayer
 local PlayerGui = Player.PlayerGui
 
 local ScreenGui = PlayerGui:WaitForChild("ScreenGui")
-local WoodLabel: TextLabel = ScreenGui:WaitForChild("Wood")
+local WoodLabel = ScreenGui:WaitForChild("ResourceBar"):WaitForChild("Wood"):WaitForChild("Label")
 
 local ResourceController = {
 	Resources = {

@@ -10,7 +10,7 @@ local Player = Players.LocalPlayer
 local MapFolder = workspace.Map
 
 local ScreenGui = Player.PlayerGui:WaitForChild("ScreenGui")
-local PopulationLabel: TextLabel = ScreenGui:WaitForChild("Population")
+local PopulationLabel = ScreenGui:WaitForChild("ResourceBar"):WaitForChild("Population"):WaitForChild("Label")
 
 local MapController = { MapCreated = Signal.new() }
 
